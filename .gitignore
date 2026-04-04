@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Tool caches
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# Data stores (reproducible or local-only)
+chroma_data/
+data/ingestion_state.db
+mlruns/
+
+# Environment
+.env
+.DS_Store
+
+# Instructions for Claude Code
+claude/

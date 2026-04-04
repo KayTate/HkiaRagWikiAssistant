@@ -1,0 +1,660 @@
+"""Node functions for the LangGraph agent graph.
+
+Each function accepts and returns an AgentState. Nodes are pure functions
+from the graph's perspective — side effects are limited to LLM calls and
+vector store reads.
+"""
+
+import json
+import logging
+import re
+from typing import Any
+
+import requests
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
+
+from agent.state import AgentState
+from config.settings import settings
+from ingestion.embedder import embed_chunks
+from vectorstore.client import (
+    get_page_by_title as vs_get_page_by_title,
+)
+from vectorstore.client import (
+    semantic_search as vs_semantic_search,
+)
+
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# LLM helpers
+# ---------------------------------------------------------------------------
+
+
+def _call_llm(system_prompt: str, user_message: str) -> str:
+    """Send a chat request to the configured LLM provider.
+
+    Dispatches to Ollama, OpenAI, or Anthropic based on settings.llm_provider.
+    Returns the assistant's reply as a plain string.
+
+    Args:
+        system_prompt: Instruction context for the LLM.
+        user_message: The user-facing message or question.
+
+    Returns:
+        The LLM's text response.
+
+    Raises:
+        RuntimeError: If the LLM provider returns an unexpected response or
+            if an unsupported provider is configured.
+    """
+    if settings.llm_provider == "ollama":
+        return _call_ollama(system_prompt, user_message)
+    if settings.llm_provider == "openai":
+        return _call_openai(system_prompt, user_message)
+    if settings.llm_provider == "anthropic":
+        return _call_anthropic(system_prompt, user_message)
+    raise RuntimeError(
+        f"Unsupported llm_provider '{settings.llm_provider}'. "
+        "Expected one of: ollama, openai, anthropic."
+    )
+
+
+def _call_ollama(system_prompt: str, user_message: str) -> str:
+    """Call the local Ollama chat API.
+
+    Args:
+        system_prompt: Instruction context.
+        user_message: User turn content.
+
+    Returns:
+        The model's reply text.
+
+    Raises:
+        RuntimeError: On HTTP error or unexpected response shape.
+    """
+    url = "http://localhost:11434/api/chat"
+    payload: dict[str, Any] = {
+        "model": settings.llm_model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_message},
+        ],
+        "stream": False,
+    }
+    try:
+        response = requests.post(url, json=payload, timeout=300)
+        response.raise_for_status()
+        data: dict[str, Any] = response.json()
+        return str(data["message"]["content"])
+    except (KeyError, ValueError) as exc:
+        raise RuntimeError(
+            f"Ollama response missing expected fields for model "
+            f"'{settings.llm_model}': {exc}"
+        ) from exc
+    except requests.HTTPError as exc:
+        raise RuntimeError(
+            f"Ollama HTTP error {exc.response.status_code} calling '{url}': {exc}"
+        ) from exc
+    except requests.RequestException as exc:
+        raise RuntimeError(f"Ollama request failed calling '{url}': {exc}") from exc
+
+
+def _call_openai(system_prompt: str, user_message: str) -> str:
+    """Call the OpenAI chat completions API with retry on rate limits.
+
+    Args:
+        system_prompt: Instruction context.
+        user_message: User turn content.
+
+    Returns:
+        The model's reply text.
+
+    Raises:
+        RuntimeError: On HTTP error, missing API key, or unexpected response.
+    """
+    if not settings.openai_api_key:
+        raise RuntimeError(
+            "OPENAI_API_KEY is not configured but llm_provider is 'openai'."
+        )
+    return _call_openai_with_retry(system_prompt, user_message)
+
+
+@retry(
+    retry=retry_if_exception_type(requests.HTTPError),
+    wait=wait_exponential(multiplier=2, min=2, max=60),
+    stop=stop_after_attempt(5),
+    reraise=True,
+)
+def _call_openai_with_retry(
+    system_prompt: str, user_message: str
+) -> str:
+    """Send a chat request to OpenAI with automatic retry on 429.
+
+    Args:
+        system_prompt: Instruction context.
+        user_message: User turn content.
+
+    Returns:
+        The model's reply text.
+
+    Raises:
+        requests.HTTPError: On rate limit after retries exhausted.
+        RuntimeError: On unexpected response shape.
+    """
+    url = "https://api.openai.com/v1/chat/completions"
+    payload: dict[str, Any] = {
+        "model": settings.llm_model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_message},
+        ],
+    }
+    try:
+        response = requests.post(
+            url,
+            headers={
+                "Authorization": f"Bearer {settings.openai_api_key}",
+                "Content-Type": "application/json",
+            },
+            json=payload,
+            timeout=300,
+        )
+        if response.status_code == 429:
+            logger.warning("OpenAI rate limit hit, will retry with backoff")
+            response.raise_for_status()
+        response.raise_for_status()
+        data: dict[str, Any] = response.json()
+        return str(data["choices"][0]["message"]["content"])
+    except (KeyError, IndexError, ValueError) as exc:
+        raise RuntimeError(
+            f"OpenAI response missing expected fields for model "
+            f"'{settings.llm_model}': {exc}"
+        ) from exc
+    except requests.HTTPError:
+        raise
+    except requests.RequestException as exc:
+        raise RuntimeError(
+            f"OpenAI request failed calling '{url}': {exc}"
+        ) from exc
+
+
+def _call_anthropic(system_prompt: str, user_message: str) -> str:
+    """Call the Anthropic Messages API.
+
+    Args:
+        system_prompt: Instruction context.
+        user_message: User turn content.
+
+    Returns:
+        The model's reply text.
+
+    Raises:
+        RuntimeError: On HTTP error, missing API key, or unexpected response.
+    """
+    if not settings.anthropic_api_key:
+        raise RuntimeError(
+            "ANTHROPIC_API_KEY is not configured but llm_provider is 'anthropic'."
+        )
+    url = "https://api.anthropic.com/v1/messages"
+    payload: dict[str, Any] = {
+        "model": settings.llm_model,
+        "max_tokens": 1024,
+        "system": system_prompt,
+        "messages": [{"role": "user", "content": user_message}],
+    }
+    try:
+        response = requests.post(
+            url,
+            headers={
+                "x-api-key": settings.anthropic_api_key,
+                "anthropic-version": "2023-06-01",
+                "Content-Type": "application/json",
+            },
+            json=payload,
+            timeout=120,
+        )
+        response.raise_for_status()
+        data: dict[str, Any] = response.json()
+        return str(data["content"][0]["text"])
+    except (KeyError, IndexError, ValueError) as exc:
+        raise RuntimeError(
+            f"Anthropic response missing expected fields for model "
+            f"'{settings.llm_model}': {exc}"
+        ) from exc
+    except requests.HTTPError as exc:
+        raise RuntimeError(
+            f"Anthropic HTTP error {exc.response.status_code} calling '{url}': {exc}"
+        ) from exc
+    except requests.RequestException as exc:
+        raise RuntimeError(f"Anthropic request failed calling '{url}': {exc}") from exc
+
+
+# ---------------------------------------------------------------------------
+# Context formatting helpers
+# ---------------------------------------------------------------------------
+
+
+def _format_chunks(chunks: list[dict[str, Any]]) -> str:
+    """Render a list of retrieved chunks into a plain text block for the LLM.
+
+    Args:
+        chunks: Dicts with at least a 'text' key.
+
+    Returns:
+        Newline-separated text block.
+    """
+    return "\n\n".join(c.get("text", "") for c in chunks if c.get("text"))
+
+
+def _build_context_block(state: AgentState) -> str:
+    """Assemble all retrieved context into a single block for synthesis.
+
+    Args:
+        state: Current agent state containing all accumulated chunks.
+
+    Returns:
+        Formatted string with entity headers and their associated chunks.
+    """
+    lines: list[str] = []
+    for entity, chunks in state.resolved_entities.items():
+        lines.append(f"=== {entity} ===")
+        lines.append(_format_chunks(chunks))
+    if state.retrieved_context:
+        lines.append("=== Additional Context ===")
+        lines.append(_format_chunks(state.retrieved_context))
+    return "\n\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Node implementations
+# ---------------------------------------------------------------------------
+
+
+def route_question(state: AgentState) -> AgentState:
+    """Extract an entity from the question for targeted page lookup.
+
+    Always attempts entity extraction so the retrieve node can do an
+    exact page lookup first, regardless of question type. Falls back
+    to semantic search only when no entity can be identified.
+
+    Args:
+        state: Initial agent state with only question populated.
+
+    Returns:
+        Updated state with current_entity set if a named entity was
+        detected.
+    """
+    entity = _extract_entity_from_question(state.question)
+    state.current_entity = entity
+    return state
+
+
+def _extract_entity_from_question(question: str) -> str | None:
+    """Extract the most likely game entity name from a question.
+
+    Uses simple heuristics: looks for quoted names first, then text
+    following action verbs like 'craft', 'unlock', 'find', 'get', etc.
+    Returns None if no entity can be confidently identified — in that
+    case the retrieve node will fall back to semantic search.
+
+    Args:
+        question: The original user question string.
+
+    Returns:
+        Entity name string or None if extraction fails.
+    """
+    quoted = re.findall(r'"([^"]+)"', question)
+    if quoted:
+        return str(quoted[0])
+
+    patterns = [
+        r"craft\s+(?:a\s+|an\s+)?(.+?)(?:\?|$|\.|\,)",
+        r"unlock\s+(.+?)(?:\?|$|\.|\,)",
+        r"complete\s+(.+?)(?:\?|$|\.|\,)",
+        r"find\s+(.+?)(?:\?|$|\.|\,)",
+        r"get\s+(?:to\s+)?(.+?)(?:\?|$|\.|\,)",
+        r"reach\s+(.+?)(?:\?|$|\.|\,)",
+        r"where\s+is\s+(.+?)(?:\?|$|\.|\,)",
+        r"who\s+is\s+(.+?)(?:\?|$|\.|\,)",
+        r"about\s+(.+?)(?:\?|$|\.|\,)",
+        r"does\s+(.+?)\s+like",
+        r"gifts?\s+(?:does\s+|for\s+)(.+?)(?:\?|$|\.|\,|\s+like)",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, question, re.IGNORECASE)
+        if match:
+            entity = match.group(1).strip()
+            # Filter out common non-entity words
+            if entity.lower() not in {"i", "you", "the", "it", "this"}:
+                return entity
+
+    return None
+
+
+def retrieve(state: AgentState) -> AgentState:
+    """Fetch chunks for the current entity or run semantic search.
+
+    Increments iteration_count before any retrieval so the limit check
+    in check_complete fires correctly even if retrieval raises. Skips
+    entities already in visited to prevent infinite loops on circular
+    prerequisite chains.
+
+    Args:
+        state: Agent state with current_entity and visited populated.
+
+    Returns:
+        Updated state with new chunks appended to retrieved_context and
+        resolved_entities, and current_entity added to visited.
+    """
+    # Increment before retrieval so the limit check is accurate.
+    state.iteration_count += 1
+
+    entity = state.current_entity
+    if entity is not None and entity in state.visited:
+        state.needs_more_retrieval = False
+        return state
+
+    if entity is not None:
+        chunks = _fetch_entity_chunks(entity)
+        state.resolved_entities[entity] = chunks
+        state.retrieved_context.extend(chunks)
+        state.visited.add(entity)
+    else:
+        chunks = _semantic_search_for_question(state.question)
+        state.retrieved_context.extend(chunks)
+
+    return state
+
+
+def _fetch_entity_chunks(entity: str) -> list[dict[str, Any]]:
+    """Retrieve all chunks for the named entity via exact page lookup.
+
+    Follows wiki redirect pages automatically — if the only chunk for a
+    page starts with "REDIRECT", the target page is fetched instead.
+    Falls back to semantic search if the page is not found.
+
+    Args:
+        entity: Exact page title to look up.
+
+    Returns:
+        List of chunk dicts.
+    """
+    chunks = vs_get_page_by_title(entity)
+    if chunks:
+        redirect_target = _extract_redirect_target(chunks)
+        if redirect_target is not None:
+            logger.info(
+                "'%s' is a redirect to '%s'; following",
+                entity,
+                redirect_target,
+            )
+            redirected = vs_get_page_by_title(redirect_target)
+            if redirected:
+                return redirected
+        return chunks
+
+    logger.info(
+        "Entity '%s' not found by title; falling back to semantic search",
+        entity,
+    )
+    embeddings = embed_chunks([entity])
+    return vs_semantic_search(
+        query_embedding=embeddings[0], top_k=settings.retrieval_top_k
+    )
+
+
+def _extract_redirect_target(chunks: list[dict[str, Any]]) -> str | None:
+    """Detect if chunks represent a wiki redirect and extract the target.
+
+    A redirect page has a single chunk whose text starts with 'REDIRECT'
+    followed by the target page title.
+
+    Args:
+        chunks: Chunks retrieved for a page.
+
+    Returns:
+        The redirect target title, or None if not a redirect.
+    """
+    if len(chunks) != 1:
+        return None
+    text = str(chunks[0].get("text", "")).strip()
+    if text.upper().startswith("REDIRECT"):
+        target = text[len("REDIRECT"):].strip()
+        if target:
+            return target
+    return None
+
+
+def _semantic_search_for_question(question: str) -> list[dict[str, Any]]:
+    """Run semantic search using the full question as the query.
+
+    Args:
+        question: The user's original question.
+
+    Returns:
+        List of chunk dicts from the vector store.
+    """
+    embeddings = embed_chunks([question])
+    return vs_semantic_search(
+        query_embedding=embeddings[0], top_k=settings.retrieval_top_k
+    )
+
+
+_EXTRACT_SYSTEM_PROMPT = (
+    "You are analyzing wiki content for Hello Kitty Island Adventure. "
+    "Given text chunks from the wiki and a player's question, determine:\n"
+    "1. Does the retrieved content fully answer the question?\n"
+    "2. Are there related entities (quests, characters, items, locations) "
+    "mentioned that need to be looked up for a complete answer?\n"
+    "3. Are there prerequisites or dependencies that need resolving?\n\n"
+    "Respond ONLY with a valid JSON object in this exact format:\n"
+    "{\n"
+    '  "prerequisites": ["Entity Name 1", "Entity Name 2"],\n'
+    '  "has_unresolved": true,\n'
+    '  "next_entity": "Entity Name 1",\n'
+    '  "is_complete": false,\n'
+    '  "key_facts": ["fact 1 from the content", "fact 2"]\n'
+    "}\n\n"
+    "Rules:\n"
+    "- Set is_complete to true ONLY if the content contains enough "
+    "specific detail to fully answer the question.\n"
+    "- If the content mentions another entity that would help answer "
+    "the question, set next_entity to that entity name.\n"
+    "- Put specific facts extracted from the content in key_facts "
+    "(e.g. recipe ingredients, gift preferences, location names).\n"
+    "- prerequisites should list any quests/tasks that must be done first.\n"
+    "- If the content is a redirect, set next_entity to the redirect target."
+)
+
+
+def extract_info(state: AgentState) -> AgentState:
+    """Extract relevant facts and identify entities needing further lookup.
+
+    Sends the retrieved content to the LLM with the original question
+    and parses the structured JSON response to decide whether more
+    retrieval is needed and what entity to look up next.
+
+    Args:
+        state: Agent state after the latest retrieve step.
+
+    Returns:
+        Updated state with prerequisite_chain extended and next entity
+        queued if further retrieval is needed.
+    """
+    entity = state.current_entity or "the topic"
+    recent_chunks = state.resolved_entities.get(
+        entity, state.retrieved_context[-5:]
+    )
+    context_text = _format_chunks(recent_chunks)
+
+    user_message = (
+        f"Question: {state.question}\n\n"
+        f"Currently looking at: {entity}\n\n"
+        f"Wiki content:\n{context_text}"
+    )
+
+    response_text = _call_llm(_EXTRACT_SYSTEM_PROMPT, user_message)
+    parsed = _parse_extract_response(response_text, state)
+    return parsed
+
+
+def _strip_markdown_fences(text: str) -> str:
+    """Remove markdown code fences from an LLM response.
+
+    LLMs often wrap JSON output in ```json ... ``` fences despite being
+    told not to. This strips them so json.loads can parse the content.
+
+    Args:
+        text: Raw LLM response that may contain markdown fences.
+
+    Returns:
+        The text with leading/trailing fences removed.
+    """
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        first_newline = stripped.find("\n")
+        if first_newline != -1:
+            stripped = stripped[first_newline + 1:]
+    if stripped.endswith("```"):
+        stripped = stripped[:-3]
+    return stripped.strip()
+
+
+def _parse_extract_response(response_text: str, state: AgentState) -> AgentState:
+    """Parse the JSON response from the extract LLM call and update state.
+
+    Handles malformed JSON gracefully by marking retrieval complete so
+    the agent doesn't loop on a broken extraction result.
+
+    Args:
+        response_text: Raw LLM response expected to be a JSON object.
+        state: Current agent state to update.
+
+    Returns:
+        Updated agent state.
+    """
+    cleaned = _strip_markdown_fences(response_text)
+    try:
+        data: dict[str, Any] = json.loads(cleaned)
+    except (json.JSONDecodeError, ValueError):
+        logger.warning(
+            "extract_info: LLM response was not valid JSON; marking complete. "
+            "Response: %s",
+            response_text[:200],
+        )
+        state.needs_more_retrieval = False
+        return state
+
+    prerequisites: list[str] = data.get("prerequisites", [])
+    for prereq in prerequisites:
+        if prereq not in state.prerequisite_chain:
+            state.prerequisite_chain.append(prereq)
+
+    is_complete: bool = bool(data.get("is_complete", False))
+    next_entity: str | None = data.get("next_entity")
+
+    if is_complete or next_entity is None:
+        state.needs_more_retrieval = False
+    elif next_entity in state.visited:
+        # Cycle detected — all remaining entities already resolved.
+        state.needs_more_retrieval = False
+    else:
+        state.current_entity = next_entity
+        state.needs_more_retrieval = True
+
+    return state
+
+
+def check_complete(state: AgentState) -> AgentState:
+    """Evaluate whether the agent should continue, synthesize, or hit the limit.
+
+    This node does not modify state — it exists as a named checkpoint so
+    the conditional edge routing logic has a clean place to branch.
+
+    Args:
+        state: Current agent state.
+
+    Returns:
+        State unchanged; routing is handled by graph conditional edges.
+    """
+    return state
+
+
+_SYNTHESIZE_SYSTEM_PROMPT = (
+    "You are a helpful assistant for Hello Kitty Island Adventure. "
+    "Answer the player's question using ONLY the wiki content provided below. "
+    "Include specific details from the wiki: exact item names, quantities, "
+    "recipe ingredients, character names, location names, and quest names. "
+    "If the wiki content contains the answer, state it directly with the "
+    "specific details. Do not give generic gaming advice. "
+    "If the wiki content does not contain enough information to answer, "
+    "say so clearly rather than guessing. "
+    "Be specific about the order of steps if prerequisites are involved."
+)
+
+
+def synthesize_answer(state: AgentState) -> AgentState:
+    """Compose the final answer from all accumulated context and the prerequisite chain.
+
+    Args:
+        state: Agent state with all retrieved context and prerequisite chain.
+
+    Returns:
+        Updated state with final_answer populated.
+    """
+    context_block = _build_context_block(state)
+    chain_text = (
+        " → ".join(state.prerequisite_chain) if state.prerequisite_chain else "None"
+    )
+
+    user_message = (
+        f"Question: {state.question}\n\n"
+        f"Prerequisite chain discovered: {chain_text}\n\n"
+        f"Wiki content:\n{context_block}"
+    )
+
+    state.final_answer = _call_llm(_SYNTHESIZE_SYSTEM_PROMPT, user_message)
+    return state
+
+
+_PARTIAL_SYSTEM_PROMPT = (
+    "You are a helpful assistant for Hello Kitty Island Adventure. "
+    "The research was cut short before all information could be gathered. "
+    "Based on the wiki content found so far, provide the best available "
+    "answer using ONLY specific details from the content. "
+    "Do not give generic advice. Clearly note that the answer may be "
+    "incomplete."
+)
+
+
+def handle_iteration_limit(state: AgentState) -> AgentState:
+    """Return the best available partial answer when max iterations is reached.
+
+    Called when the agent has iterated agent_max_iterations times without
+    reaching a definitive answer. Produces a partial answer with an explicit
+    note that the chain may be incomplete.
+
+    Args:
+        state: Agent state at the iteration limit.
+
+    Returns:
+        Updated state with final_answer populated with a partial result.
+    """
+    context_block = _build_context_block(state)
+    chain_text = (
+        " → ".join(state.prerequisite_chain) if state.prerequisite_chain else "None"
+    )
+
+    user_message = (
+        f"Question: {state.question}\n\n"
+        f"Prerequisite chain found so far (may be incomplete): {chain_text}\n\n"
+        f"Wiki content retrieved:\n{context_block}"
+    )
+
+    state.final_answer = _call_llm(_PARTIAL_SYSTEM_PROMPT, user_message)
+    return state

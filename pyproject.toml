@@ -1,0 +1,44 @@
+[project]
+name = "hkia-rag"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "langgraph>=0.2",
+    "langchain-core>=0.2",
+    "chromadb>=0.5",
+    "mwparserfromhell>=0.6",
+    "mlflow>=2.14",
+    "gradio>=4.0",
+    "ollama>=0.2",
+    "openai>=1.0",
+    "tenacity>=8.0",
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+    "langchain>=1.2.15",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-mock>=3.0",
+    "ruff>=0.4",
+    "mypy>=1.10",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "C4", "UP"]
+
+[tool.mypy]
+strict = true
+python_version = "3.12"
+
+[dependency-groups]
+dev = [
+    "mypy>=1.20.0",
+    "pydantic-settings>=2.13.1",
+    "ruff>=0.15.8",
+]
