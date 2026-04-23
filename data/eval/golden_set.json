@@ -1,0 +1,394 @@
+[
+  {
+    "inputs": { "question": "How do I unlock the Wild Mountain Time quest?" },
+    "expected_response": "To unlock Wild Mountain Time, you need to complete the Dig It Up quest and have Poco as a permanent 5-star island resident. To complete Dig It Up, you must reach friendship level 10 with Wish me mell and complete the Mulch Be Well quest. Mulch Be Well requires friendship level 8 with Wish me mell and completing the Green Thumbs quest. Green Thumbs requires friendship level 6 with Wish me mell and access to Merry Meadows Plaza. You access Merry Meadows Plaza by planting a Giant Seed in Merry Meadows Fields. To get Poco as a permanent resident, his Visitor Cabin must be in Merry Meadow, contain 6 pieces of chair furniture, 3 Meadow items, and a Hibiscus.",
+    "metadata": {
+      "source": "golden",
+      "question_type": "prerequisite"
+    }
+  },
+  {
+    "inputs": { "question": "How do I craft a marigold candle?" },
+    "expected_response": "To craft a Marigold Candle, you need the Creation Station in Merry Meadows. The ingredients are 5 marigolds and 5 beeswax. Marigold flowers only sprout during the Colorblaze Carnival event. To unlock the Creation Station, you must complete the A Place to Art quest, which requires access to Merry Meadows Temple and completing both the Beyond the Blooming Door and Dig It Up quests. Beyond the Blooming Door requires completing the Petal Puzzle quest, which is unlocked by accessing Merry Meadows Temple and interacting with the entrance door. Dig It Up requires friendship level 10 with Wish me mell and completing the Mulch Be Well quest.",
+    "metadata": {
+      "source": "golden",
+      "question_type": "prerequisite"
+    }
+  },
+  {
+    "inputs": { "question": "How do I craft a thistle flower crown?" },
+    "expected_response": "To craft a Thistle Flower Crown, you need the Creation Station in Merry Meadows, 15 thistles, and 5 thread. To unlock the Creation Station, complete the A Place to Art quest, which requires access to Merry Meadows Temple and completing the Beyond the Blooming Door and Dig It Up quests. Beyond the Blooming Door requires completing the Petal Puzzle quest. Dig It Up requires friendship level 10 with Wish me mell and completing the Mulch Be Well quest. To get thistles, you must complete the Wild Mountain Time quest, which requires completing Dig It Up and having Poco as a permanent 5-star island resident. Poco's Visitor Cabin must be in Merry Meadow with 6 pieces of chair furniture, 3 Meadow items, and a Hibiscus.",
+    "metadata": {
+      "source": "golden",
+      "question_type": "prerequisite"
+    }
+  },
+  {
+    "inputs": { "question": "How do I unlock the fish derby?" },
+    "expected_response": "To unlock the Fish Derby, you must complete the Fish Derby Fun quest, which requires completing the Swimming Upstream quest. Swimming Upstream requires completing A Bigger Fish Tale, which in turn requires completing A Fishy Investigation. A Fishy Investigation requires completing both the Enraging Ruins and Fish Noir quests. Enraging Ruins requires reaching friendship level 7 with Retsuko and completing the Power Up the Gate quest.",
+    "metadata": {
+      "source": "golden",
+      "question_type": "prerequisite"
+    }
+  },
+  {
+    "inputs": { "question": "How do I unlock the Snow Day ability?" },
+    "expected_response": "To unlock the Snow Day ability, you must reach friendship level 12 with Moppu and complete the Aim for Fun quest. Aim for Fun requires completing the Snacks'n'Sweets quest, which requires friendship level 7 with Moppu and completing the Tinkering Time quest. Tinkering Time requires friendship level 3 with Moppu and completing the Snow Day quest. The Snow Day quest requires completing the Mind the Gap quest, which requires completing the Mountain Hopes quest.",
+    "metadata": {
+      "source": "golden",
+      "question_type": "prerequisite"
+    }
+  },
+  {
+    "inputs": { "question": "How do I unlock the treasure hunt?" },
+    "expected_response": "To unlock the Treasure Hunt, you must complete the Chasing the Horizon quest, which requires completing the Pirate Pearl quest. Pirate Pearl requires completing the Cursed Crates quest, which requires completing the Stray Shipments quest. Stray Shipments requires completing the Deep Diving quest, which requires reaching friendship level 6 with Kuromi and completing both the Finding Flippers and Re-Haunt the Spooky Swamp quests.",
+    "metadata": {
+      "source": "golden",
+      "question_type": "prerequisite"
+    }
+  },
+  {
+    "inputs": { "question": "How do I get back to the airplane?" },
+    "expected_response": "You can travel to the airplane at any time by speaking to the Propeller Hat Nul after completing the Cinnamonroll Is Missing quest. To unlock that quest, you need to reach friendship level 14 with Cinnamonroll and complete the Delivery Service quest. The Delivery Service quest is unlocked by reaching friendship level 1 with Kuromi.",
+    "metadata": {
+      "source": "golden",
+      "question_type": "prerequisite"
+    }
+  },
+  {
+    "inputs": { "question": "How do I repair the boardwalk to Gemstone Mountain?" },
+    "expected_response": "Big Challenges repairs the boardwalk during the Coastal Crawl quest. To unlock Coastal Crawl, you need to reach friendship level 9 with Big Challenges and complete the A Bridge Too Short quest. A Bridge Too Short is unlocked by reaching friendship level 6 with Big Challenges.",
+    "metadata": {
+      "source": "golden",
+      "question_type": "prerequisite"
+    }
+  },
+  {
+    "inputs": { "question": "How do I unlock the cloud cabins on Cloud Island?" },
+    "expected_response": "The Cloud Cabins are unlocked during the Cloud Cabins quest, which requires reaching friendship level 10 with Kiki and completing the Sweets in the Stars quest. Sweets in the Stars requires friendship level 2 with Lala and completing the Icy Recovery quest. Icy Recovery requires friendship level 1 with Lala and completing both the A Challenging Rescue and Stargazing quests. A Challenging Rescue requires at least 3 stamina apples and completing the following quests: Power Up the Gate, Re-Haunt the Spooky Swamp, Comic Relief, Bring Back the Swing, Enraging Ruins, Open the Nature Preserve, Reef Revival, Revive the Oasis, and Fire Up the Volcano.",
+    "metadata": {
+      "source": "golden",
+      "question_type": "prerequisite"
+    }
+  },
+  {
+    "inputs": { "question": "How do I unlock the flower plots on Caldera?" },
+    "expected_response": "To unlock the flower plots on Caldera, you must complete the Dragon's Breath quest, which requires completing the Extremophile Flora quest series. The Extremophile Flora quest is unlocked after plucking your first Dreampuff and completing both the Grand Garden Gathering and Flowers of Our Labor quests. Grand Garden Gathering requires having Lou, Aro, Chico, Marin, Poco, and Lutz as permanent 5-star residents on the island. Flowers of Our Labor requires having Roseanne as a permanent resident and completing the Sky Sprouts quest. To get Lou as a permanent resident, decorate a cabin in Merry Meadows with 2 plant items, one Island Challenge Trophy, and a Pochacco Energy Pop.",
+    "metadata": {
+      "source": "golden",
+      "question_type": "prerequisite"
+    }
+  },
+  {
+    "inputs": { "question": "What is an Avatar Palette?" },
+    "expected_response": "An Avatar Palette is a customization option for your character in the game. You can change your character's appearance at any time by interacting with a mirror. Additional avatar palettes are unlocked by raising your friendship level with the other islanders.",
+    "metadata": {
+      "source": "golden",
+      "question_type": "mechanic"
+    }
+  },
+  {
+    "inputs": { "question": "What is the Fish Derby?" },
+    "expected_response": "The Fish Derby is an activity located near the Comic and Bait Shop that unlocks after completing the Fish Derby Fun quest. Each week, new fish targets and a prize are listed on the Billboard. The targets always include 10 tiny fish of a particular species, 6 regular-sized fish of a particular species, and 3 huge fish of a particular species. Once all fish have been caught, you turn them in to the Nul wearing a Pirate Hat to receive that week's prize. The prizes are all past event furniture and reset weekly.",
+    "metadata": {
+      "source": "golden",
+      "question_type": "mechanic"
+    }
+  },
+  {
+    "inputs": { "question": "How do I get My Melody Boxes?" },
+    "expected_response": "My Melody Boxes are obtained by gifting My Melody and completing Daily Quests after reaching Best Friend status with her. The boxes replace her regular return gift once you hit the maximum friendship level.",
+    "metadata": {
+      "source": "golden",
+      "question_type": "mechanic"
+    }
+  },
+  {
+    "inputs": { "question": "How does friendship work?" },
+    "expected_response": "You can increase friendship with Island Residents by giving them gifts. A maximum of 3 gifts can be given per day, and this limit can be reset by using a Friendship Blossom or Friendship Bouquet. Raising your friendship level may unlock companion abilities, avatar palettes, furniture, recipes, crafting plans, and quests.",
+    "metadata": {
+      "source": "golden",
+      "question_type": "mechanic"
+    }
+  },
+  {
+    "inputs": { "question": "What are Around the Island quests?" },
+    "expected_response": "Around the Island quests are quests that involve exploring the island, often by finding, collecting, or distributing items. Most of these quests unlock randomly once their requirements are met.",
+    "metadata": {
+      "source": "golden",
+      "question_type": "mechanic"
+    }
+  },
+  {
+    "inputs": { "question": "What are birthday quests?" },
+    "expected_response": "A birthday quest is a special type of Special Gatherings quest that is only available for 7 days each year, corresponding to an island resident's birthday. At the end of the quest, you receive a decorative party favor and birthday balloon crafting plans for that character. Birthday quests are not repeatable, but the celebration content is available yearly during the same time period.",
+    "metadata": {
+      "source": "golden",
+      "question_type": "mechanic"
+    }
+  },
+  {
+    "inputs": { "question": "How does stamina work?" },
+    "expected_response": "Stamina is used to explore certain parts of Friendship Island, and is required for diving and climbing. You can increase your stamina capacity by crafting stamina apples. Some companion abilities affect stamina use, and the Stamina Recharge Potion can also help manage stamina.",
+    "metadata": {
+      "source": "golden",
+      "question_type": "mechanic"
+    }
+  },
+  {
+    "inputs": { "question": "What are passive tools?" },
+    "expected_response": "Passive tools are tools that are always available if the correct conditions are met, without needing to be equipped via the tool wheel. Examples include balloons, flippers, snorkel, pickaxe, and watering can.",
+    "metadata": {
+      "source": "golden",
+      "question_type": "mechanic"
+    }
+  },
+  {
+    "inputs": { "question": "How does the inventory system work?" },
+    "expected_response": "Your inventory contains all items you own, excluding the ones you are using to decorate Visitor Cabins. There is no maximum number of items you can own. Some items are usable or consumable but can only be used from inside the inventory.",
+    "metadata": {
+      "source": "golden",
+      "question_type": "mechanic"
+    }
+  },
+  {
+    "inputs": { "question": "What are daily rewards?" },
+    "expected_response": "Daily rewards are given to the player when they log in for the day. Daily login rewards are given by My Melody after logging in. During events, additional Event Daily Rewards may also be available.",
+    "metadata": {
+      "source": "golden",
+      "question_type": "mechanic"
+    }
+  },
+  {
+    "inputs": { "question": "Who is Tam?" },
+    "expected_response": "Tam is Tuxedosam's younger brother and may visit the island anytime in Summer or Winter if his Visitor Cabin requirements are met. You can increase his chance of visiting by including items with his liked tag, Cloth. His Visitor Cabin must be in Seaside Resort, have one piece of Sunshine Celebration furniture, and have five pieces of clothing on display.",
+    "metadata": {
+      "source": "golden",
+      "question_type": "friendship"
+    }
+  },
+  {
+    "inputs": { "question": "What are the best gifts to give to Keroppi?" },
+    "expected_response": "Keroppi's liked tags are Critters, Swampy, and Wood. The best gifts in order from highest value to lowest are critter totems, swampy lamb plush, bush fiend, other swampy-tagged critters, swampy rare-tagged fish, and lotus blossoms.",
+    "metadata": {
+      "source": "golden",
+      "question_type": "friendship"
+    }
+  },
+  {
+    "inputs": { "question": "What can I unlock by raising my friendship level to 15 with Kuromi?" },
+    "expected_response": "When you reach friendship level 15 with Kuromi, you will unlock the blueprints for the Cauldron.",
+    "metadata": {
+      "source": "golden",
+      "question_type": "friendship"
+    }
+  },
+  {
+    "inputs": { "question": "When do I unlock the Slow & Steady companion ability?" },
+    "expected_response": "The Slow & Steady companion ability is unlocked after reaching friendship level 12 with Pompompurin. When active, it gives you an additional 5 seconds to complete island challenge courses.",
+    "metadata": {
+      "source": "golden",
+      "question_type": "friendship"
+    }
+  },
+  {
+    "inputs": { "question": "Who is Tuxedosam?" },
+    "expected_response": "Tuxedosam is an island resident who runs the clothing shop in Seaside Resort.",
+    "metadata": {
+      "source": "golden",
+      "question_type": "friendship"
+    }
+  },
+  {
+    "inputs": { "question": "What does Retsuko give as a gift?" },
+    "expected_response": "Retsuko gives dough as a return gift until you reach friendship level 20. After that, she gives Retsuko Boxes, which contain dough, obsidian shards, and possibly dye pouches.",
+    "metadata": {
+      "source": "golden",
+      "question_type": "friendship"
+    }
+  },
+  {
+    "inputs": { "question": "Who are visitors to the island that are friends of Cinnamonroll?" },
+    "expected_response": "Cinnamonroll's friends who can visit the island are Cappuccino, Espresso, Mocha, Chiffon, Azuki, Berry, Cherry, Milk, Poron, and Corune.",
+    "metadata": {
+      "source": "golden",
+      "question_type": "friendship"
+    }
+  },
+  {
+    "inputs": { "question": "What is Dear Daniel's daily gift when he is on the island?" },
+    "expected_response": "Dear Daniel gives one Mama's Apple Pie each day he is on the island.",
+    "metadata": {
+      "source": "golden",
+      "question_type": "friendship"
+    }
+  },
+  {
+    "inputs": { "question": "When is Espresso's birthday?" },
+    "expected_response": "Espresso's birthday is December 4th.",
+    "metadata": {
+      "source": "golden",
+      "question_type": "friendship"
+    }
+  },
+  {
+    "inputs": { "question": "How do I get the Retsuko Holiday Stocking?" },
+    "expected_response": "To get the Retsuko Holiday Stocking, you must give Retsuko's Holiday Gift to Retsuko during the Give & Gather quest. This is a Special Gatherings quest that occurs annually during the Give & Gather Celebration and ends on December 26th. After giving the gift, you will receive a Character Holiday Gift containing the Retsuko Holiday Stocking underneath the Present Pine.",
+    "metadata": {
+      "source": "golden",
+      "question_type": "crafting"
+    }
+  },
+  {
+    "inputs": { "question": "Where can I get a Spooky Double Bed?" },
+    "expected_response": "A Spooky Bed can be transformed into a Spooky Double Bed at the Dessert Boat by interacting with the cash register. To unlock the Spooky Bed, you must reach friendship level 19 with Kuromi.",
+    "metadata": {
+      "source": "golden",
+      "question_type": "crafting"
+    }
+  },
+  {
+    "inputs": { "question": "Where can I find Hello Kitty's Cafe Display Case?" },
+    "expected_response": "Hello Kitty's Cafe Display Case can be found inside a Radiant Chest on a floating crate northeast of Hopscotch Islands. After obtaining it, it can also be purchased from Small Gift Big Smile.",
+    "metadata": {
+      "source": "golden",
+      "question_type": "crafting"
+    }
+  },
+  {
+    "inputs": { "question": "How do I make the 50th Anniversary Cheesecake?" },
+    "expected_response": "You can make the 50th Anniversary Cheesecake using the Oven after it has been upgraded at friendship level 15 with Hello Kitty. The ingredients are flour, a bubble, and moon cheese. Bubbles are only collectible during the Interlude of Dreams event.",
+    "metadata": {
+      "source": "golden",
+      "question_type": "crafting"
+    }
+  },
+  {
+    "inputs": { "question": "How do I catch a Burning Perch?" },
+    "expected_response": "Burning Perch can be caught in the mornings on Caldera. Huge Burning Perch are found in the upper west Caldera lava pools, regular-sized ones are in the east Caldera lava pools, and tiny ones can be found in the south Caldera lava pools. Their favorite bait is spicy pizza, and their favorite lure is the Spicy Spinner Lure.",
+    "metadata": {
+      "source": "golden",
+      "question_type": "crafting"
+    }
+  },
+  {
+    "inputs": { "question": "What can I craft with paper?" },
+    "expected_response": "Paper is used to craft art supplies, blank books, Badtz-maru Birthday Balloons, and clues.",
+    "metadata": {
+      "source": "golden",
+      "question_type": "crafting"
+    }
+  },
+  {
+    "inputs": { "question": "How do I get a Fwish Nightstand?" },
+    "expected_response": "Fwish Nightstands can be obtained by donating fish to the Fwishing Well.",
+    "metadata": {
+      "source": "golden",
+      "question_type": "crafting"
+    }
+  },
+  {
+    "inputs": { "question": "How do I obtain the Gudetama Dress?" },
+    "expected_response": "The Gudetama Dress is unlocked after taking a photo of 132 Gudetamas and interacting with the Gudetama Sign.",
+    "metadata": {
+      "source": "golden",
+      "question_type": "crafting"
+    }
+  },
+  {
+    "inputs": { "question": "Where can I find Fish Almanac No. 4?" },
+    "expected_response": "Fish Almanac No. 4 can be found randomly inside any thermal boulder in Gemstone Mountain after steam weather occurs there.",
+    "metadata": {
+      "source": "golden",
+      "question_type": "crafting"
+    }
+  },
+  {
+    "inputs": { "question": "What items have the metal tag?" },
+    "expected_response": "Items with the metal tag include the Huge Metal Magnet Lure, Ingot, Metal Magnet Lure, Microphone, Retsuko's Birthday Cake, Sounds of Steel, Tiny Metal Magnet Lure, and Volcanic Guitar.",
+    "metadata": {
+      "source": "golden",
+      "question_type": "crafting"
+    }
+  },
+  {
+    "inputs": { "question": "How do I access Merry Meadows Plaza?" },
+    "expected_response": "You can unlock Merry Meadows Plaza by planting a Giant Seed in Merry Meadows Fields. The planting location is found in front of the stone wall in Merry Meadows Fields.",
+    "metadata": {
+      "source": "golden",
+      "question_type": "location"
+    }
+  },
+  {
+    "inputs": { "question": "Where can I find Giant Seeds?" },
+    "expected_response": "Giant Seeds can be found in several locations: in Merry Meadows Fields toward the bottom right of the pond on an island; in a treasure chest in the Electric Introductions puzzle room in Merry Meadows Overlook; inside a boulder on an island along the Cloud Ride path after completing the Cloud Cabins quest; inside a boulder north of the Outer Cloud Cabin after the planting location is accessible; and as a reward for the Care Packages quest.",
+    "metadata": {
+      "source": "golden",
+      "question_type": "location"
+    }
+  },
+  {
+    "inputs": { "question": "Which characters are typically in Seaside Resort?" },
+    "expected_response": "The characters typically found in Seaside Resort are My Melody near the Resort Plaza in her shop Small Gift Big Smile, Hello Kitty near the Resort Plaza in Hello Kitty Cafe, Tuxedosam west of the Resort Plaza in his clothing shop, Pochacco east of the Resort Plaza exercising near the fast travel station, Chococat near the Resort Gate fast travel station next to his tent, Badtz-maru near the Resort Docks running the Comic and Bait Shop, and Keroppi near the Comic and Bait Shop when he is not in the Spooky Swamp.",
+    "metadata": {
+      "source": "golden",
+      "question_type": "location"
+    }
+  },
+  {
+    "inputs": { "question": "How do I unlock the Spooky Swamp?" },
+    "expected_response": "To unlock the Spooky Swamp, complete the Power Up the Gate quest, which is unlocked by reaching friendship level 1 with Chococat.",
+    "metadata": {
+      "source": "golden",
+      "question_type": "location"
+    }
+  },
+  {
+    "inputs": { "question": "What fish can I find in Rainbow Reef?" },
+    "expected_response": "In Rainbow Reef you can catch Amethyst Snipe, Briny Clamfish, Electric Tang, Galaxy Grouper, Kelpfin, Masked Wrassler, Opal Flutterfin, Royal Lance, Ruby Dreamscale, Sailing Charmfish, Sandy Puffer, Starry Snipe, and Sunset Guppy.",
+    "metadata": {
+      "source": "golden",
+      "question_type": "location"
+    }
+  },
+  {
+    "inputs": { "question": "How do I unlock Gemstone Mountain?" },
+    "expected_response": "Gemstone Mountain becomes accessible after completing the Power Up the Gate quest, which requires reaching friendship level 1 with Chococat. You can reach it via the beach path north of Spooky Swamp, the zipline from Spooky Swamp, or by swimming with flippers.",
+    "metadata": {
+      "source": "golden",
+      "question_type": "location"
+    }
+  },
+  {
+    "inputs": { "question": "How do I unlock the Moon?" },
+    "expected_response": "To unlock the Moon, you must complete the This Tall to Ride quest, which requires completing the Where It All Began quest. Where It All Began requires completing the Secrets and Sleuths quest, which needs friendship level 7 with Kiki and completing the Return to the Heart quest series, Peak Weather, Espresso Machine Repair, Saunarator, Starry Treasures, and A Place to Art. The Return to the Heart quest series requires friendship level 20 with Big Challenges, friendship level 10 with TOPHAT, completing the Straight to Your Heart and Up in the Clouds quest series, and having at least 15 spirit hearts.",
+    "metadata": {
+      "source": "golden",
+      "question_type": "location"
+    }
+  },
+  {
+    "inputs": { "question": "How do I unlock the Red Hot Ruins?" },
+    "expected_response": "You unlock the Red Hot Ruins by reaching friendship level 7 with Retsuko.",
+    "metadata": {
+      "source": "golden",
+      "question_type": "location"
+    }
+  },
+  {
+    "inputs": { "question": "How do I reach Snow Village?" },
+    "expected_response": "To reach Snow Village, you must complete the Mind the Gap quest, which requires completing the Mountain Hopes quest. Mountain Hopes requires completing the Rain or Shine quest and the Ice and Glow quest series. Rain or Shine requires completing the Island Stone quest, which requires completing A Clue on the Shore. The Ice and Glow quest series requires completing the Straight to Your Heart quest, the Big Challenges' Big Challenge quest series, the Absence Makes the Heart quest, and having at least 5 spirit hearts.",
+    "metadata": {
+      "source": "golden",
+      "question_type": "location"
+    }
+  },
+  {
+    "inputs": { "question": "Where is the candy cloud machine?" },
+    "expected_response": "The candy cloud machine is located on the upper eastern island of Cloud Island.",
+    "metadata": {
+      "source": "golden",
+      "question_type": "location"
+    }
+  }
+]
