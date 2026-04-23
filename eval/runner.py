@@ -205,8 +205,8 @@ def run_experiment(
         mlflow.log_params(params)
 
         # Log dataset as an MLflow input artifact.
-        mlflow_dataset = mlflow.data.from_list(  # type: ignore[attr-defined]
-            source=dataset,
+        mlflow_dataset = mlflow.data.from_pandas(
+            pd.DataFrame(dataset),
             name="golden_set",
         )
         mlflow.log_input(mlflow_dataset, context="eval")

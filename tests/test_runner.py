@@ -1,22 +1,30 @@
-"""Tests for eval/runner.py — acceptance criterion: eval runner completes a
-full experiment run with baseline parameters and logs results to MLflow."""
+"""Tests for eval/runner.py.
+
+The runner uses mlflow.genai.evaluate() with LLM judge scorers against
+a compiled agent graph. These tests patch the agent, judges, and
+evaluate call so the runner can be exercised without network access.
+"""
 
 import json
 import pathlib
+from typing import Any
 
 import mlflow
+import pandas as pd
 
-from eval.runner import run_experiment
+from eval.runner import (
+    SCORER_METRIC_NAMES,
+    _load_and_transform_dataset,
+    run_experiment,
+)
 
-BASELINE_PARAMS = {
+BASELINE_PARAMS: dict[str, object] = {
     "chunking_strategy": "recursive",
     "chunk_size": 512,
     "chunk_overlap": 64,
-    "embedding_model": "nomic-embed-text:v1.5",
-    "llm_model": "gpt-5.4-mini",
-    "top_k": 5,
-    "similarity_threshold": 0.7,
-    "version": "test_v1",
+    "embedding_model": "nomic-embed-text",
+    "llm_model": "gpt-4o",
+    "retrieval_top_k": 5,
 }
 
 FIXTURE_DATASET = [
@@ -33,7 +41,7 @@ FIXTURE_DATASET = [
         "expected_response": (
             "Keroppi likes frogs, nature items, and pond-related gifts."
         ),
-        "metadata": {"source": "golden", "question_type": "character"},
+        "metadata": {"source": "golden", "question_type": "friendship"},
     },
     {
         "inputs": {"question": "How do I craft a Wooden Bench?"},
@@ -44,109 +52,128 @@ FIXTURE_DATASET = [
 
 
 def _write_fixture_dataset(tmp_path: pathlib.Path) -> str:
-    """Write the fixture dataset to a temporary file and return the path."""
+    """Write the fixture dataset to a temporary file and return its path."""
     path = tmp_path / "golden_set.json"
     path.write_text(json.dumps(FIXTURE_DATASET), encoding="utf-8")
     return str(path)
 
 
-def _stub_predict_fn(inputs: dict[str, object]) -> str:
-    """Deterministic stub predict function that echoes part of the question."""
-    question = str(inputs.get("question", ""))
-    return f"Stub answer for: {question}"
+def _stub_eval_results(dataset_size: int) -> Any:
+    """Return an object shaped like mlflow.genai.evaluate()'s return value.
+
+    The runner reads ``tables["eval_results"]`` (a DataFrame) to compute
+    per-question-type metric breakdowns, so the stub populates the same
+    columns the judge scorers would.
+    """
+    df = pd.DataFrame({metric: [0.5] * dataset_size for metric in SCORER_METRIC_NAMES})
+
+    class _StubResults:
+        tables = {"eval_results": df}
+
+    return _StubResults()
 
 
-def test_run_experiment_completes_without_error(tmp_path: pathlib.Path) -> None:
-    """run_experiment completes with a stub predict_fn and no exceptions are raised."""
-    mlflow.set_tracking_uri(str(tmp_path / "mlruns"))
-    dataset_path = _write_fixture_dataset(tmp_path)
+def _patch_runner_externals(mocker: Any, dataset_size: int) -> None:
+    """Mock the agent graph, judges, and the evaluate call.
 
-    returned_run = run_experiment(
-        experiment_name="test_hkia_eval",
-        run_name="test_baseline",
-        params=BASELINE_PARAMS,
-        dataset_path=dataset_path,
-        predict_fn=_stub_predict_fn,
+    Keeps run_experiment self-contained so tests don't hit Ollama,
+    OpenAI, or the real ChromaDB.
+    """
+    mocker.patch(
+        "eval.runner._build_predict_fn",
+        return_value=lambda inputs: f"stub: {inputs['question']}",
+    )
+    mocker.patch("eval.runner._build_scorers", return_value=[])
+    mocker.patch(
+        "mlflow.genai.evaluate",
+        return_value=_stub_eval_results(dataset_size),
     )
 
-    assert returned_run is not None
 
-
-def test_run_experiment_returns_mlflow_run_object(tmp_path: pathlib.Path) -> None:
-    """run_experiment returns an mlflow.entities.Run instance."""
-    mlflow.set_tracking_uri(str(tmp_path / "mlruns"))
+def test_load_and_transform_dataset_moves_expected_response(
+    tmp_path: pathlib.Path,
+) -> None:
+    """_load_and_transform_dataset nests expected_response under expectations."""
     dataset_path = _write_fixture_dataset(tmp_path)
+
+    transformed = _load_and_transform_dataset(dataset_path)
+
+    assert len(transformed) == len(FIXTURE_DATASET)
+    for original, result in zip(FIXTURE_DATASET, transformed, strict=True):
+        assert result["inputs"] == original["inputs"]
+        assert (
+            result["expectations"]["expected_response"] == original["expected_response"]
+        )
+        assert result["metadata"] == original["metadata"]
+
+
+def test_run_experiment_returns_mlflow_run_object(
+    tmp_path: pathlib.Path, mocker: Any
+) -> None:
+    """run_experiment returns an mlflow.entities.Run instance."""
+    mlflow.set_tracking_uri((tmp_path / "mlruns").as_uri())
+    dataset_path = _write_fixture_dataset(tmp_path)
+    _patch_runner_externals(mocker, dataset_size=len(FIXTURE_DATASET))
 
     result = run_experiment(
         experiment_name="test_hkia_eval_run_type",
         run_name="test_run_type",
         params=BASELINE_PARAMS,
         dataset_path=dataset_path,
-        predict_fn=_stub_predict_fn,
     )
 
     assert isinstance(result, mlflow.entities.Run)
 
 
-def test_run_experiment_logs_params_to_mlflow(tmp_path: pathlib.Path) -> None:
+def test_run_experiment_logs_params_to_mlflow(
+    tmp_path: pathlib.Path, mocker: Any
+) -> None:
     """run_experiment logs all params so they appear in the MLflow run data."""
-    tracking_uri = str(tmp_path / "mlruns")
+    tracking_uri = (tmp_path / "mlruns").as_uri()
     mlflow.set_tracking_uri(tracking_uri)
     dataset_path = _write_fixture_dataset(tmp_path)
+    _patch_runner_externals(mocker, dataset_size=len(FIXTURE_DATASET))
 
     returned_run = run_experiment(
         experiment_name="test_hkia_eval_params",
         run_name="test_params",
         params=BASELINE_PARAMS,
         dataset_path=dataset_path,
-        predict_fn=_stub_predict_fn,
     )
 
     client = mlflow.tracking.MlflowClient(tracking_uri=tracking_uri)
-    run_data = client.get_run(returned_run.info.run_id)
-    logged_params = run_data.data.params
+    logged_params = client.get_run(returned_run.info.run_id).data.params
 
     assert logged_params.get("chunking_strategy") == "recursive"
-    assert logged_params.get("top_k") == "5"
-    assert logged_params.get("embedding_model") == "nomic-embed-text:v1.5"
+    assert logged_params.get("retrieval_top_k") == "5"
+    assert logged_params.get("embedding_model") == "nomic-embed-text"
 
 
-def test_run_experiment_logs_metrics_to_mlflow(tmp_path: pathlib.Path) -> None:
-    """run_experiment logs exact_match and token_overlap metrics to the run."""
-    tracking_uri = str(tmp_path / "mlruns")
+def test_run_experiment_logs_per_question_type_metrics(
+    tmp_path: pathlib.Path, mocker: Any
+) -> None:
+    """run_experiment logs per-question-type breakdowns from judge scores."""
+    tracking_uri = (tmp_path / "mlruns").as_uri()
     mlflow.set_tracking_uri(tracking_uri)
     dataset_path = _write_fixture_dataset(tmp_path)
+    _patch_runner_externals(mocker, dataset_size=len(FIXTURE_DATASET))
 
     returned_run = run_experiment(
         experiment_name="test_hkia_eval_metrics",
         run_name="test_metrics",
         params=BASELINE_PARAMS,
         dataset_path=dataset_path,
-        predict_fn=_stub_predict_fn,
     )
 
     client = mlflow.tracking.MlflowClient(tracking_uri=tracking_uri)
-    run_data = client.get_run(returned_run.info.run_id)
-    logged_metrics = run_data.data.metrics
+    logged_metrics = client.get_run(returned_run.info.run_id).data.metrics
 
-    assert "exact_match" in logged_metrics
-    assert "token_overlap" in logged_metrics
-
-
-def test_run_experiment_handles_predict_fn_exception(tmp_path: pathlib.Path) -> None:
-    """run_experiment continues and records empty response when predict_fn raises."""
-    mlflow.set_tracking_uri(str(tmp_path / "mlruns"))
-    dataset_path = _write_fixture_dataset(tmp_path)
-
-    def _failing_predict(inputs: dict[str, object]) -> str:
-        raise RuntimeError("Simulated failure")
-
-    returned_run = run_experiment(
-        experiment_name="test_hkia_eval_failure",
-        run_name="test_failure_handling",
-        params=BASELINE_PARAMS,
-        dataset_path=dataset_path,
-        predict_fn=_failing_predict,
-    )
-
-    assert isinstance(returned_run, mlflow.entities.Run)
+    # Each scorer metric should be broken down by every question type
+    # present in the fixture dataset.
+    present_types = {entry["metadata"]["question_type"] for entry in FIXTURE_DATASET}
+    for metric in SCORER_METRIC_NAMES:
+        tag = metric.replace("/", "_")
+        for qtype in present_types:
+            assert f"{tag}.{qtype}" in logged_metrics, (
+                f"Expected per-question-type metric '{tag}.{qtype}' in MLflow run"
+            )

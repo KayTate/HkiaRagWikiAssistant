@@ -108,6 +108,33 @@ Open [http://127.0.0.1:7860](http://127.0.0.1:7860) in your browser.
 
 Open [http://127.0.0.1:5000](http://127.0.0.1:5000) in your browser.
 
+### Evaluation
+
+Run an experiment against the golden set and log results to MLflow.
+`params` are auto-populated from your active settings so each run
+captures a full config snapshot.
+
+```bash
+# Baseline run with default dataset (data/eval/golden_set.json)
+python scripts/run_eval.py --experiment hkia_baseline --run baseline
+
+# Custom dataset path
+python scripts/run_eval.py \
+    --experiment hkia_baseline \
+    --run v2 \
+    --dataset data/eval/golden_set.json
+```
+
+Prerequisites:
+
+- Ingestion has completed at least once (`python sync.py --mode status`) —
+  the agent retrieves from ChromaDB, so an empty collection produces
+  meaningless scores.
+- `OPENAI_API_KEY` is set — the LLM judges use `openai:/gpt-4o-mini`
+  regardless of which provider the agent itself is configured for.
+
+Inspect runs in the MLflow UI (see above).
+
 ## Project Structure
 
 ```text
@@ -131,10 +158,10 @@ hkia-rag/
 ├── eval/                       # Evaluation pipeline
 │   ├── dataset.py              # Dataset loading and validation
 │   ├── generate.py             # Synthetic Q&A generation
-│   ├── scorers.py              # Exact match and token overlap scorers
-│   └── runner.py               # MLflow experiment runner
+│   └── runner.py               # MLflow experiment runner with LLM judge scorers
 ├── app/gradio_app.py           # Gradio chat frontend
 ├── sync.py                     # CLI entry point for ingestion
+├── scripts/run_eval.py         # CLI entry point for evaluation runs
 └── tests/                      # pytest test suite
 ```
 
