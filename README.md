@@ -29,9 +29,8 @@ uv sync
 # Activate the virtual environment
 source .venv/bin/activate
 
-# Install Ollama models
+# Install Ollama models (for embeddings)
 ollama pull nomic-embed-text
-ollama pull llama3
 ```
 
 ### Windows
@@ -52,9 +51,8 @@ uv sync
 # Install Ollama (via winget or https://ollama.com/download)
 winget install Ollama.Ollama
 
-# Install Ollama models
+# Install Ollama models (for embeddings)
 ollama pull nomic-embed-text
-ollama pull llama3
 ```
 
 ## Configuration
@@ -71,8 +69,8 @@ Key settings:
 | --- | --- | --- |
 | `EMBEDDING_PROVIDER` | `ollama` | `ollama` or `openai` |
 | `EMBEDDING_MODEL` | `nomic-embed-text` | Embedding model name |
-| `LLM_PROVIDER` | `ollama` | `ollama`, `openai`, or `anthropic` |
-| `LLM_MODEL` | `llama3` | LLM model name |
+| `LLM_PROVIDER` | `openai` | `ollama`, `openai`, or `anthropic` |
+| `LLM_MODEL` | `gpt-5.4-mini` | LLM model name |
 | `OPENAI_API_KEY` | (empty) | Required if using OpenAI |
 | `ANTHROPIC_API_KEY` | (empty) | Required if using Anthropic |
 
@@ -104,7 +102,8 @@ Open [http://127.0.0.1:7860](http://127.0.0.1:7860) in your browser.
 ### MLflow UI
 
 ```bash
-.venv/bin/mlflow ui
+.venv/bin/mlflow ui            # macOS / Linux
+.venv\Scripts\mlflow ui        # Windows
 ```
 
 Open [http://127.0.0.1:5000](http://127.0.0.1:5000) in your browser.

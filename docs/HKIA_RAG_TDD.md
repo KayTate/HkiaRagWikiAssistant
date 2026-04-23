@@ -156,7 +156,7 @@ class Settings(BaseSettings):
 
     # ChromaDB
     chroma_persist_dir: str = "./chroma_data"
-    chroma_collection_name: str = "hkia_v1"  # bump on embedding model change
+    chroma_collection_name: str = "hkia_nomic-embed-text_recursive_v1"  # convention: hkia_{model}_{strategy}_v{n}
 
     # Embedding
     embedding_provider: Literal["ollama", "openai"] = "ollama"
@@ -166,8 +166,8 @@ class Settings(BaseSettings):
     openai_embedding_batch_size: int = 100
 
     # LLM
-    llm_provider: Literal["ollama", "openai", "anthropic"] = "ollama"
-    llm_model: str = "llama3"
+    llm_provider: Literal["ollama", "openai", "anthropic"] = "openai"
+    llm_model: str = "gpt-5.4-mini"
     anthropic_api_key: str = ""
     openai_api_key: str = ""
 
@@ -201,12 +201,12 @@ settings = Settings()
 
 ```text
 WIKI_BASE_URL=https://hellokittyislandadventure.wiki.gg
-CHROMA_COLLECTION_NAME=hkia_v1
+CHROMA_COLLECTION_NAME=hkia_nomic-embed-text_recursive_v1
 EMBEDDING_PROVIDER=ollama
 EMBEDDING_MODEL=nomic-embed-text
 EMBEDDING_MODEL_VERSION=v1.5
 LLM_PROVIDER=ollama
-LLM_MODEL=llama3
+LLM_MODEL=gpt-5.4-mini
 OPENAI_API_KEY=
 ANTHROPIC_API_KEY=
 ```
@@ -387,7 +387,7 @@ def run_startup_sync_check() -> None
     #   samples 10 random chunks from the collection
     #   if any chunk has embedding_model != current settings:
     #     raise EmbeddingModelMismatchError with instructions:
-    #       1. Update settings.chroma_collection_name to a new version (e.g. hkia_v2)
+    #       1. Update settings.chroma_collection_name to a new version (e.g. hkia_nomic-embed-text_recursive_v2)
     #       2. Run full ingestion to build the new collection
     #       3. Update config to point the app at the new collection
     #   this case requires operator intervention — it means the collection
@@ -405,7 +405,7 @@ def run_startup_sync_check() -> None
 - **Auto-repaired (SQLite drift):** SQLite rows with a stale `embedding_model` are silently reset to `pending`. This covers the crash-between-writes scenario and requires no operator action.
 - **Operator intervention required (ChromaDB mismatch):** If the ChromaDB collection itself contains chunks from a different model than current settings, the entire collection is invalid for retrieval. This cannot be auto-repaired in place because vectors from different embedding spaces cannot coexist in one collection. The operator must create a new versioned collection and run full ingestion.
 
-**Collection naming convention:** `hkia_v{n}` where n is incremented on any embedding model change. Current baseline is `hkia_v1`. The active collection name is always set via `settings.chroma_collection_name` so cutover is a config change, not a code change.
+**Collection naming convention:** `hkia_{embedding_model}_{chunking_strategy}_v{n}` where the version number increments when creating a new collection with the same embedding model and chunking strategy (e.g. `hkia_nomic-embed-text_recursive_v1`). The active collection name is always set via `settings.chroma_collection_name` so cutover is a config change, not a code change.
 
 ### 5.3 ChromaDB Client Interface
 
@@ -696,18 +696,18 @@ Each experiment varies one parameter from the baseline. All other parameters are
 
 - Chunking: recursive, chunk_size=512, overlap=64
 - Embedding: nomic-embed-text:v1.5 (Ollama)
-- LLM: llama3 (Ollama)
+- LLM: gpt-5.4-mini (OpenAI)
 - top_k: 5, similarity_threshold: 0.7
 
 | Experiment | Parameter Changed | Values |
 | --- | --- | --- |
 | E1 — Chunking | chunking_strategy | recursive (baseline) vs section |
 | E2 — Embedding | embedding_model | nomic-embed-text (baseline) vs text-embedding-3-small |
-| E3 — LLM | llm_model | llama3 (baseline) vs gpt-4o vs claude-sonnet |
+| E3 — LLM | llm_model | gpt-5.4-mini (baseline) vs gpt-4o vs claude-sonnet |
 | E4 — Retrieval | top_k | 3, 5 (baseline), 10 |
 | E4 — Retrieval | similarity_threshold | 0.6, 0.7 (baseline), 0.8 |
 
-**Note on E2:** Switching embedding models requires building a new ChromaDB collection (`hkia_v2`) via full re-ingestion before running the experiment. See Section 5.2.
+**Note on E2:** Switching embedding models requires building a new ChromaDB collection (e.g. `hkia_text-embedding-3-small_recursive_v1`) via full re-ingestion before running the experiment. See Section 5.2.
 
 ---
 

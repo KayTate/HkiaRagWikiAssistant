@@ -11,7 +11,7 @@ class Settings(BaseSettings):
 
     # ChromaDB
     chroma_persist_dir: str = "./chroma_data"
-    chroma_collection_name: str = "hkia_v1"
+    chroma_collection_name: str = "hkia_nomic-embed-text_recursive_v1"
 
     # Embedding
     embedding_provider: Literal["ollama", "openai"] = "ollama"
@@ -21,8 +21,8 @@ class Settings(BaseSettings):
     openai_embedding_batch_size: int = 100
 
     # LLM
-    llm_provider: Literal["ollama", "openai", "anthropic"] = "ollama"
-    llm_model: str = "llama3"
+    llm_provider: Literal["ollama", "openai", "anthropic"] = "openai"
+    llm_model: str = "gpt-5.4-mini"
     anthropic_api_key: str = ""
 
     # LangGraph

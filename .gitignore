@@ -12,10 +12,16 @@ __pycache__/
 chroma_data/
 data/ingestion_state.db
 mlruns/
+mlflow.db
 
 # Environment
 .env
 .DS_Store
 
 # Instructions for Claude Code
-claude/
+claude_context/
+CLAUDE.md
+.claude/
+
+# VS Code Workspace
+*.code-workspace

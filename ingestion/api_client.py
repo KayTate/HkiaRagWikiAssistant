@@ -169,6 +169,7 @@ def get_all_pages_with_revision_ids() -> list[dict[str, str | int]]:
     Raises:
         WikiAPIError: If any paginated request fails after retries.
     """
+    logger.info("Fetching all page titles with revision IDs from wiki")
     results: list[dict[str, str | int]] = []
     params: dict[str, str] = {
         "action": "query",

@@ -139,7 +139,7 @@ Every chunk is stored with the following metadata in ChromaDB:
 | `ingested_at` | Timestamp of ingestion |
 | `embedding_model` | Name and version of the embedding model used (e.g. `nomic-embed-text:v1.5`) |
 
-**Embedding model versioning** — the `embedding_model` metadata field is critical for collection integrity. Vectors produced by different embedding models occupy incompatible spaces and cannot be mixed in the same collection. Any change to the embedding model (version upgrade or model swap for an experiment) requires a full re-ingest into a new versioned ChromaDB collection (e.g. `hkia_v1`, `hkia_v2`). The application config specifies which collection name to query at runtime, allowing atomic cutover from one collection to another without downtime.
+**Embedding model versioning** — the `embedding_model` metadata field is critical for collection integrity. Vectors produced by different embedding models occupy incompatible spaces and cannot be mixed in the same collection. Any change to the embedding model (version upgrade or model swap for an experiment) requires a full re-ingest into a new versioned ChromaDB collection. Collections follow the naming convention `hkia_{embedding_model}_{chunking_strategy}_v{n}` (e.g. `hkia_nomic-embed-text_recursive_v1`), where the version number increments for the same model + strategy combination. The application config specifies which collection name to query at runtime, allowing atomic cutover from one collection to another without downtime.
 
 ---
 
@@ -193,7 +193,7 @@ Four experiments are planned, each varying one component while holding others co
 | --- | --- | --- | --- |
 | Chunking | Chunking strategy | Recursive character splitting | Section-based splitting |
 | Embedding | Embedding model | `nomic-embed-text` (Ollama) | `text-embedding-3-small` (OpenAI) |
-| LLM | Generation model | Local Ollama model (e.g. llama3) | Claude or GPT-4o via API |
+| LLM | Generation model | OpenAI gpt-5.4-mini | Claude or GPT-4o via API |
 | Retrieval | top-k, similarity threshold | k=5, threshold=0.7 | Grid search over k∈{3,5,10}, threshold∈{0.6,0.7,0.8} |
 
 ### 6.4 Metrics
@@ -218,7 +218,7 @@ Metrics are additionally sliced by `question_type` and `source` metadata to surf
 | Embeddings | `nomic-embed-text` via Ollama (baseline) | Already installed; free; swappable |
 | Agentic orchestration | LangGraph | Stateful multi-hop retrieval; generalizes to all entity types |
 | LangChain utilities | Text splitters only | Avoids framework lock-in while reusing tested components |
-| LLM | Local Ollama model (baseline) | Free; swappable via MLflow experiments |
+| LLM | OpenAI gpt-5.4-mini (baseline) | Cost-effective; swappable via MLflow experiments |
 | Frontend | Gradio | Minimal code; standard for ML demos; fast to ship |
 | Experiment tracking | MLflow | Target platform; GenAI eval API |
 | Version control | Git | Code + eval dataset |

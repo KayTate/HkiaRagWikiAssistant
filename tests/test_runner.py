@@ -13,7 +13,7 @@ BASELINE_PARAMS = {
     "chunk_size": 512,
     "chunk_overlap": 64,
     "embedding_model": "nomic-embed-text:v1.5",
-    "llm_model": "llama3",
+    "llm_model": "gpt-5.4-mini",
     "top_k": 5,
     "similarity_threshold": 0.7,
     "version": "test_v1",

@@ -33,6 +33,7 @@ def _get_client() -> ClientAPI:
     """
     global _chroma_client
     if _chroma_client is None:
+        logger.info("Initializing ChromaDB client with persist directory '%s'", settings.chroma_persist_dir)
         _chroma_client = chromadb.PersistentClient(path=settings.chroma_persist_dir)
     return _chroma_client
 
@@ -67,6 +68,7 @@ def verify_collection_embedding_model() -> None:
             a different embedding model. Operator intervention is required
             to resolve this — it cannot be auto-repaired.
     """
+    logger.info("Verifying ChromaDB collection embedding model")
     collection = get_or_create_collection(settings.chroma_collection_name)
     count = collection.count()
     if count == 0:

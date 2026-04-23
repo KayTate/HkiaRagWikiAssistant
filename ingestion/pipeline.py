@@ -37,6 +37,7 @@ def run_startup_sync_check() -> None:
         EmbeddingModelMismatchError: If ChromaDB chunks from a different
             model are detected. See error message for remediation steps.
     """
+    logger.info("Running startup sync check for embedding model consistency")
     vectorstore_client.verify_collection_embedding_model()
     _repair_stale_sqlite_rows()
 
@@ -47,6 +48,7 @@ def _repair_stale_sqlite_rows() -> None:
     Each stale row is updated to pending with a revision_id of -1 as a
     sentinel, triggering full re-fetch and re-embedding on the next run.
     """
+    logger.info("Checking for SQLite rows with stale embedding model")
     current_model = _current_embedding_model()
     stale_pages = state_db.get_pages_with_stale_embedding_model(current_model)
     for page in stale_pages:
