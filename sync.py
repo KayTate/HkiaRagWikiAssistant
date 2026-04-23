@@ -7,16 +7,12 @@ Usage:
 """
 
 import argparse
-import logging
 
+from config.logging_config import setup_logging
 from ingestion.pipeline import run_full_ingestion, run_incremental_ingestion
 from ingestion.state_db import get_status_summary
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s — %(message)s",
-    datefmt="%H:%M:%S",
-)
+setup_logging()
 
 parser = argparse.ArgumentParser(
     description="Sync wiki content into the HKIA RAG vector store."

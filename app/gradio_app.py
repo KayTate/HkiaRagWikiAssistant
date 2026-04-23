@@ -103,4 +103,7 @@ demo = gr.ChatInterface(
 )
 
 if __name__ == "__main__":
+    from config.logging_config import setup_logging
+
+    setup_logging()
     demo.launch()

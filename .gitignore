@@ -14,6 +14,9 @@ data/ingestion_state.db
 mlruns/
 mlflow.db
 
+# Logs
+logs/
+
 # Environment
 .env
 .DS_Store
