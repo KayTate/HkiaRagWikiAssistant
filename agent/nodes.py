@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-def _call_llm(system_prompt: str, user_message: str) -> str:
+def _call_llm(system_prompt: str, user_message: str, json_mode: bool = False) -> str:
     """Send a chat request to the configured LLM provider.
 
     Dispatches to Ollama, OpenAI, or Anthropic based on settings.llm_provider.
@@ -44,6 +44,9 @@ def _call_llm(system_prompt: str, user_message: str) -> str:
     Args:
         system_prompt: Instruction context for the LLM.
         user_message: The user-facing message or question.
+        json_mode: When True and the provider supports it, request a
+            strict JSON object response. Currently only wired up for
+            OpenAI; silently ignored for Ollama and Anthropic.
 
     Returns:
         The LLM's text response.
@@ -53,10 +56,12 @@ def _call_llm(system_prompt: str, user_message: str) -> str:
             if an unsupported provider is configured.
     """
     if settings.llm_provider == "ollama":
+        # json_mode accepted but not wired up for Ollama yet.
         return _call_ollama(system_prompt, user_message)
     if settings.llm_provider == "openai":
-        return _call_openai(system_prompt, user_message)
+        return _call_openai(system_prompt, user_message, json_mode=json_mode)
     if settings.llm_provider == "anthropic":
+        # json_mode accepted but not wired up for Anthropic yet.
         return _call_anthropic(system_prompt, user_message)
     raise RuntimeError(
         f"Unsupported llm_provider '{settings.llm_provider}'. "
@@ -104,12 +109,14 @@ def _call_ollama(system_prompt: str, user_message: str) -> str:
         raise RuntimeError(f"Ollama request failed calling '{url}': {exc}") from exc
 
 
-def _call_openai(system_prompt: str, user_message: str) -> str:
+def _call_openai(system_prompt: str, user_message: str, json_mode: bool = False) -> str:
     """Call the OpenAI chat completions API with retry on rate limits.
 
     Args:
         system_prompt: Instruction context.
         user_message: User turn content.
+        json_mode: When True, request a strict JSON object response via
+            the OpenAI response_format parameter.
 
     Returns:
         The model's reply text.
@@ -121,7 +128,7 @@ def _call_openai(system_prompt: str, user_message: str) -> str:
         raise RuntimeError(
             "OPENAI_API_KEY is not configured but llm_provider is 'openai'."
         )
-    return _call_openai_with_retry(system_prompt, user_message)
+    return _call_openai_with_retry(system_prompt, user_message, json_mode=json_mode)
 
 
 @retry(
@@ -131,13 +138,16 @@ def _call_openai(system_prompt: str, user_message: str) -> str:
     reraise=True,
 )
 def _call_openai_with_retry(
-    system_prompt: str, user_message: str
+    system_prompt: str, user_message: str, json_mode: bool = False
 ) -> str:
     """Send a chat request to OpenAI with automatic retry on 429.
 
     Args:
         system_prompt: Instruction context.
         user_message: User turn content.
+        json_mode: When True, include response_format={"type":
+            "json_object"} in the request so OpenAI guarantees a valid
+            JSON object response.
 
     Returns:
         The model's reply text.
@@ -154,6 +164,8 @@ def _call_openai_with_retry(
             {"role": "user", "content": user_message},
         ],
     }
+    if json_mode:
+        payload["response_format"] = {"type": "json_object"}
     try:
         response = requests.post(
             url,
@@ -178,9 +190,7 @@ def _call_openai_with_retry(
     except requests.HTTPError:
         raise
     except requests.RequestException as exc:
-        raise RuntimeError(
-            f"OpenAI request failed calling '{url}': {exc}"
-        ) from exc
+        raise RuntimeError(f"OpenAI request failed calling '{url}': {exc}") from exc
 
 
 def _call_anthropic(system_prompt: str, user_message: str) -> str:
@@ -424,7 +434,7 @@ def _extract_redirect_target(chunks: list[dict[str, Any]]) -> str | None:
         return None
     text = str(chunks[0].get("text", "")).strip()
     if text.upper().startswith("REDIRECT"):
-        target = text[len("REDIRECT"):].strip()
+        target = text[len("REDIRECT") :].strip()
         if target:
             return target
     return None
@@ -452,7 +462,11 @@ _EXTRACT_SYSTEM_PROMPT = (
     "2. Are there related entities (quests, characters, items, locations) "
     "mentioned that need to be looked up for a complete answer?\n"
     "3. Are there prerequisites or dependencies that need resolving?\n\n"
-    "Respond ONLY with a valid JSON object in this exact format:\n"
+    "Output format (STRICT):\n"
+    "Respond with ONLY a valid JSON object. DO NOT include markdown code "
+    "fences (no ```json, no ```), commentary, explanations, or any prose "
+    "before or after the JSON. The entire response must be parseable by "
+    "json.loads. Every field listed below is REQUIRED on every response:\n"
     "{\n"
     '  "prerequisites": ["Entity Name 1", "Entity Name 2"],\n'
     '  "has_unresolved": true,\n'
@@ -460,11 +474,24 @@ _EXTRACT_SYSTEM_PROMPT = (
     '  "is_complete": false,\n'
     '  "key_facts": ["fact 1 from the content", "fact 2"]\n'
     "}\n\n"
+    "Example of a CORRECTLY formatted response:\n"
+    '{"prerequisites": ["Straight to Your Heart"], '
+    '"has_unresolved": true, '
+    '"next_entity": "Straight to Your Heart", '
+    '"is_complete": false, '
+    '"key_facts": ["Ice and Glow unlocks the Frozen Falls area"]}\n\n'
+    "Example of an INCORRECT response (do NOT do this):\n"
+    "Here is the analysis:\n"
+    "```json\n"
+    '{"prerequisites": ["Straight to Your Heart"], ...}\n'
+    "```\n"
+    "This is wrong because it includes prose and markdown fences.\n\n"
     "Rules:\n"
     "- Set is_complete to true ONLY if the content contains enough "
     "specific detail to fully answer the question.\n"
     "- If the content mentions another entity that would help answer "
-    "the question, set next_entity to that entity name.\n"
+    "the question, set next_entity to that entity name. Otherwise use "
+    "null.\n"
     "- Put specific facts extracted from the content in key_facts "
     "(e.g. recipe ingredients, gift preferences, location names).\n"
     "- prerequisites should list any quests/tasks that must be done first.\n"
@@ -487,9 +514,7 @@ def extract_info(state: AgentState) -> AgentState:
         queued if further retrieval is needed.
     """
     entity = state.current_entity or "the topic"
-    recent_chunks = state.resolved_entities.get(
-        entity, state.retrieved_context[-5:]
-    )
+    recent_chunks = state.resolved_entities.get(entity, state.retrieved_context[-5:])
     context_text = _format_chunks(recent_chunks)
 
     user_message = (
@@ -498,9 +523,10 @@ def extract_info(state: AgentState) -> AgentState:
         f"Wiki content:\n{context_text}"
     )
 
-    response_text = _call_llm(_EXTRACT_SYSTEM_PROMPT, user_message)
-    parsed = _parse_extract_response(response_text, state)
-    return parsed
+    data = _extract_with_retry(user_message)
+    if data is None:
+        return _handle_parse_failure(state)
+    return _apply_extract_result(data, state)
 
 
 def _strip_markdown_fences(text: str) -> str:
@@ -519,37 +545,71 @@ def _strip_markdown_fences(text: str) -> str:
     if stripped.startswith("```"):
         first_newline = stripped.find("\n")
         if first_newline != -1:
-            stripped = stripped[first_newline + 1:]
+            stripped = stripped[first_newline + 1 :]
     if stripped.endswith("```"):
         stripped = stripped[:-3]
     return stripped.strip()
 
 
-def _parse_extract_response(response_text: str, state: AgentState) -> AgentState:
-    """Parse the JSON response from the extract LLM call and update state.
+def _extract_with_retry(
+    user_message: str, max_attempts: int = 3
+) -> dict[str, Any] | None:
+    """Call the extract LLM with retries on JSON decode failure.
 
-    Handles malformed JSON gracefully by marking retrieval complete so
-    the agent doesn't loop on a broken extraction result.
+    First attempt uses the unmodified user_message. On decode failure,
+    subsequent attempts include the previous malformed response and an
+    explicit nudge to return strict JSON. Capped at max_attempts total
+    LLM calls.
 
     Args:
-        response_text: Raw LLM response expected to be a JSON object.
+        user_message: The initial user content for the extract prompt.
+        max_attempts: Total number of LLM calls allowed (default 3 =
+            1 initial + 2 retries).
+
+    Returns:
+        Parsed dict on success, or None if all attempts fail.
+    """
+    current_message = user_message
+    for attempt in range(1, max_attempts + 1):
+        response_text = _call_llm(
+            _EXTRACT_SYSTEM_PROMPT, current_message, json_mode=True
+        )
+        cleaned = _strip_markdown_fences(response_text)
+        try:
+            data: dict[str, Any] = json.loads(cleaned)
+            return data
+        except (json.JSONDecodeError, ValueError):
+            logger.warning(
+                "extract_info: JSON decode failed on attempt %d/%d. Response: %s",
+                attempt,
+                max_attempts,
+                response_text[:200],
+            )
+            current_message = (
+                f"{user_message}\n\n"
+                f"Your previous response was:\n{response_text}\n\n"
+                "Your previous response was not valid JSON. Respond with "
+                "ONLY a valid JSON object matching the schema. No markdown, "
+                "no prose."
+            )
+
+    logger.error(
+        "extract_info: JSON decode failed after %d attempts; giving up.",
+        max_attempts,
+    )
+    return None
+
+
+def _apply_extract_result(data: dict[str, Any], state: AgentState) -> AgentState:
+    """Update agent state from a successfully parsed extract response.
+
+    Args:
+        data: Parsed JSON dict from the extract LLM.
         state: Current agent state to update.
 
     Returns:
         Updated agent state.
     """
-    cleaned = _strip_markdown_fences(response_text)
-    try:
-        data: dict[str, Any] = json.loads(cleaned)
-    except (json.JSONDecodeError, ValueError):
-        logger.warning(
-            "extract_info: LLM response was not valid JSON; marking complete. "
-            "Response: %s",
-            response_text[:200],
-        )
-        state.needs_more_retrieval = False
-        return state
-
     prerequisites: list[str] = data.get("prerequisites", [])
     for prereq in prerequisites:
         if prereq not in state.prerequisite_chain:
@@ -567,6 +627,26 @@ def _parse_extract_response(response_text: str, state: AgentState) -> AgentState
         state.current_entity = next_entity
         state.needs_more_retrieval = True
 
+    return state
+
+
+def _handle_parse_failure(state: AgentState) -> AgentState:
+    """Fallback when all JSON parse retries are exhausted.
+
+    Prefer continuing retrieval over returning an incomplete answer. The
+    agent_max_iterations cap (default 10) prevents runaway looping.
+
+    Args:
+        state: Current agent state.
+
+    Returns:
+        State with needs_more_retrieval set to True.
+    """
+    logger.error(
+        "extract_info: falling back to needs_more_retrieval=True after "
+        "exhausting JSON parse retries."
+    )
+    state.needs_more_retrieval = True
     return state
 
 

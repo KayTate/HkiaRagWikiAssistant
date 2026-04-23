@@ -122,9 +122,11 @@ def test_agent_stops_on_circular_prerequisites(mocker: Any) -> None:
 
     extract_call_count: list[int] = [0]
 
-    def mock_call_llm(system_prompt: str, user_message: str) -> str:
+    def mock_call_llm(
+        system_prompt: str, user_message: str, json_mode: bool = False
+    ) -> str:
         """Return circular extract responses or a partial synthesis answer."""
-        del user_message
+        del user_message, json_mode
         entity = "Quest A" if extract_call_count[0] % 2 == 0 else "Quest B"
         extract_call_count[0] += 1
         if "partial" in system_prompt.lower() or "cut short" in system_prompt.lower():
@@ -186,9 +188,11 @@ def test_agent_respects_max_iterations(mocker: Any) -> None:
 
     call_count: list[int] = [0]
 
-    def mock_call_llm(system_prompt: str, user_message: str) -> str:
+    def mock_call_llm(
+        system_prompt: str, user_message: str, json_mode: bool = False
+    ) -> str:
         """Return always-new prerequisite responses until synthesis is requested."""
-        del user_message
+        del user_message, json_mode
         call_count[0] += 1
         if "partial" in system_prompt.lower() or "cut short" in system_prompt.lower():
             return "Partial answer: the agent reached its iteration limit."
@@ -219,4 +223,79 @@ def test_agent_respects_max_iterations(mocker: Any) -> None:
     )
     assert result.final_answer != "", (
         "handle_iteration_limit must populate final_answer"
+    )
+
+
+def test_agent_continues_on_persistent_parse_failure(mocker: Any, caplog: Any) -> None:
+    """Agent must keep retrieving when extract JSON fails to parse.
+
+    On persistent JSON decode failure, extract_info falls back to
+    needs_more_retrieval=True instead of silently marking the question
+    complete. The loop continues until agent_max_iterations, at which
+    point handle_iteration_limit produces a partial answer.
+    """
+    import logging
+
+    mocker.patch(
+        "agent.nodes.vs_get_page_by_title",
+        return_value=[
+            {
+                "text": "Quest 0 details here.",
+                "metadata": {"source_title": "Quest 0", "chunk_index": 0},
+            }
+        ],
+    )
+    mocker.patch(
+        "agent.nodes.embed_chunks",
+        side_effect=_stub_embed_chunks,
+    )
+    mocker.patch(
+        "agent.nodes.vs_semantic_search",
+        side_effect=_stub_semantic_search,
+    )
+
+    extract_call_count: list[int] = [0]
+
+    def mock_call_llm(
+        system_prompt: str, user_message: str, json_mode: bool = False
+    ) -> str:
+        """Return unparseable text for extract prompts; canned answer for partial."""
+        del user_message, json_mode
+        if "partial" in system_prompt.lower() or "cut short" in system_prompt.lower():
+            return _partial_answer_response()
+        if "prerequisites" in system_prompt.lower():
+            extract_call_count[0] += 1
+            return "Here is the answer: I think Quest A requires Quest B."
+        return _partial_answer_response()
+
+    mocker.patch("agent.nodes._call_llm", side_effect=mock_call_llm)
+    mocker.patch("agent.graph.mlflow")
+
+    from agent.graph import compile_graph
+    from config.settings import settings
+
+    graph = compile_graph()
+
+    initial_state = AgentState(
+        question="What do I need to complete Quest 0?",
+        current_entity="Quest 0",
+    )
+
+    with caplog.at_level(logging.ERROR, logger="agent.nodes"):
+        raw = graph.invoke(initial_state)
+    result = AgentState(**raw)
+
+    assert result.iteration_count == settings.agent_max_iterations, (
+        f"Expected iteration_count == {settings.agent_max_iterations}, "
+        f"got {result.iteration_count}"
+    )
+    assert result.final_answer != "", (
+        "Partial answer must be produced when retries are exhausted"
+    )
+    # 10 iterations × 3 attempts per iteration = 30 max extract calls
+    assert extract_call_count[0] <= settings.agent_max_iterations * 3, (
+        f"Extract should be capped at max_iterations*3, got {extract_call_count[0]}"
+    )
+    assert any(record.levelno == logging.ERROR for record in caplog.records), (
+        "At least one error-level log must be emitted when parse retries exhaust"
     )
