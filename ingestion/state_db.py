@@ -7,6 +7,8 @@ need re-ingestion due to a model change.
 
 import logging
 import sqlite3
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -40,6 +42,24 @@ def _connect() -> sqlite3.Connection:
     return conn
 
 
+@contextmanager
+def _connection() -> Iterator[sqlite3.Connection]:
+    """Context-managed SQLite connection that commits on success, rolls back
+    on exception, and always closes.
+
+    Wraps the existing ``with conn:`` protocol so read/write semantics are
+    unchanged. The outer ``finally`` guarantees ``conn.close()`` runs even
+    on Windows where file locks would otherwise block tempdir cleanup in
+    tests.
+    """
+    conn = _connect()
+    try:
+        with conn:
+            yield conn
+    finally:
+        conn.close()
+
+
 def _now_iso() -> str:
     """Return the current UTC time as an ISO 8601 string."""
     return datetime.now(UTC).isoformat()
@@ -62,7 +82,7 @@ def upsert_page(
         status: One of 'pending', 'in_progress', or 'complete'.
         embedding_model: Formatted model identifier, e.g. "nomic-embed-text:v1.5".
     """
-    with _connect() as conn:
+    with _connection() as conn:
         conn.execute(
             """
             INSERT INTO page_ingestion_state
@@ -87,7 +107,7 @@ def get_page(page_title: str) -> dict | None:  # type: ignore[type-arg]
     Returns:
         A dict with keys matching the table columns, or None if not found.
     """
-    with _connect() as conn:
+    with _connection() as conn:
         row = conn.execute(
             "SELECT * FROM page_ingestion_state WHERE page_title = ?",
             (page_title,),
@@ -104,7 +124,7 @@ def get_pages_by_status(status: str) -> list[dict]:  # type: ignore[type-arg]
     Returns:
         List of row dicts ordered by page_title.
     """
-    with _connect() as conn:
+    with _connection() as conn:
         rows = conn.execute(
             "SELECT * FROM page_ingestion_state WHERE status = ? ORDER BY page_title",
             (status,),
@@ -125,7 +145,7 @@ def get_pages_with_stale_embedding_model(current_model: str) -> list[dict]:  # t
     Returns:
         List of row dicts for pages where embedding_model != current_model.
     """
-    with _connect() as conn:
+    with _connection() as conn:
         rows = conn.execute(
             """
             SELECT * FROM page_ingestion_state
@@ -147,7 +167,7 @@ def mark_complete(page_title: str) -> None:
     Args:
         page_title: The wiki page title to mark complete.
     """
-    with _connect() as conn:
+    with _connection() as conn:
         conn.execute(
             """
             UPDATE page_ingestion_state
@@ -168,7 +188,7 @@ def mark_pending(page_title: str, revision_id: int) -> None:
         page_title: The wiki page title to reset.
         revision_id: The new revision ID from the MediaWiki API.
     """
-    with _connect() as conn:
+    with _connection() as conn:
         conn.execute(
             """
             UPDATE page_ingestion_state
@@ -188,7 +208,7 @@ def get_status_summary() -> str:
     Returns:
         A formatted string like "pending: 10, in_progress: 2, complete: 4000".
     """
-    with _connect() as conn:
+    with _connection() as conn:
         rows = conn.execute(
             """
             SELECT status, COUNT(*) as count

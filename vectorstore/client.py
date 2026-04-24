@@ -33,9 +33,22 @@ def _get_client() -> ClientAPI:
     """
     global _chroma_client
     if _chroma_client is None:
-        logger.info("Initializing ChromaDB client with persist directory '%s'", settings.chroma_persist_dir)
+        logger.info(
+            "Initializing ChromaDB client with persist directory '%s'",
+            settings.chroma_persist_dir,
+        )
         _chroma_client = chromadb.PersistentClient(path=settings.chroma_persist_dir)
     return _chroma_client
+
+
+def reset_client() -> None:
+    """Reset the ChromaDB client singleton. Intended for test teardown.
+
+    Prevents cross-test contamination when tests patch ``chroma_persist_dir``
+    to different paths. No-op if the client was never initialized.
+    """
+    global _chroma_client
+    _chroma_client = None
 
 
 def get_or_create_collection(name: str) -> Collection:
