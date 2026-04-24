@@ -24,3 +24,5 @@ class AgentState:
     needs_more_retrieval: bool = True
     # Current entity being resolved; None signals semantic-search mode.
     current_entity: str | None = None
+    # Correlation id for retrieval logs; populated in route_question.
+    trace_id: str = ""

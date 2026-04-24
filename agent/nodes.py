@@ -8,6 +8,9 @@ vector store reads.
 import json
 import logging
 import re
+import time
+import uuid
+from datetime import UTC, datetime
 from typing import Any
 
 import requests
@@ -29,6 +32,96 @@ from vectorstore.client import (
 )
 
 logger = logging.getLogger(__name__)
+_retrieval_logger = logging.getLogger("retrieval")
+
+
+def _log_event(event: str, state: AgentState, **fields: Any) -> None:
+    """Emit one JSON-encoded retrieval observability event.
+
+    Gated by settings.retrieval_log_enabled. Each event carries a
+    millisecond-precision UTC timestamp, the per-question trace_id, and
+    the current iteration count so events from a single run can be
+    reassembled with `jq` or grep.
+
+    Args:
+        event: Short event name — one of query_received, retrieve,
+            llm_call, extract_decision, synthesize.
+        state: Current agent state, used for trace_id and iter.
+        **fields: Event-specific payload fields.
+    """
+    if not settings.retrieval_log_enabled:
+        return
+    payload: dict[str, Any] = {
+        "ts": datetime.now(UTC)
+        .isoformat(timespec="milliseconds")
+        .replace("+00:00", "Z"),
+        "event": event,
+        "trace_id": state.trace_id,
+        "iter": state.iteration_count,
+        **fields,
+    }
+    _retrieval_logger.info(json.dumps(payload, default=str, ensure_ascii=False))
+
+
+def _serialize_chunk(chunk: dict[str, Any]) -> dict[str, Any]:
+    """Flatten a retrieved chunk into a JSON-serialisable log record."""
+    metadata = dict(chunk.get("metadata") or {})
+    source_title = metadata.get("source_title", "")
+    chunk_index = metadata.get("chunk_index", 0)
+    return {
+        "id": f"{source_title}::{chunk_index}",
+        "source_title": source_title,
+        "chunk_index": chunk_index,
+        "distance": chunk.get("distance"),
+        "text": chunk.get("text", ""),
+        "metadata": metadata,
+    }
+
+
+def _call_llm_and_log(
+    system_prompt: str,
+    user_message: str,
+    *,
+    json_mode: bool,
+    node: str,
+    state: AgentState,
+) -> str:
+    """Invoke _call_llm and emit an llm_call retrieval event.
+
+    Wraps the existing provider-dispatching _call_llm with timing plus a
+    structured log of the full system prompt, user message, and response.
+    The public _call_llm signature is intentionally left untouched so
+    existing test mocks continue to work.
+    """
+    start = time.perf_counter()
+    try:
+        response = _call_llm(system_prompt, user_message, json_mode=json_mode)
+    except Exception as exc:
+        latency_ms = round((time.perf_counter() - start) * 1000, 2)
+        _log_event(
+            "llm_call",
+            state,
+            node=node,
+            system_prompt=system_prompt,
+            user_message=user_message,
+            json_mode=json_mode,
+            response=None,
+            error=repr(exc),
+            latency_ms=latency_ms,
+        )
+        raise
+    latency_ms = round((time.perf_counter() - start) * 1000, 2)
+    _log_event(
+        "llm_call",
+        state,
+        node=node,
+        system_prompt=system_prompt,
+        user_message=user_message,
+        json_mode=json_mode,
+        response=response,
+        latency_ms=latency_ms,
+    )
+    return response
 
 # ---------------------------------------------------------------------------
 # LLM helpers
@@ -299,8 +392,16 @@ def route_question(state: AgentState) -> AgentState:
         Updated state with current_entity set if a named entity was
         detected.
     """
+    if not state.trace_id:
+        state.trace_id = uuid.uuid4().hex
     entity = _extract_entity_from_question(state.question)
     state.current_entity = entity
+    _log_event(
+        "query_received",
+        state,
+        question=state.question,
+        current_entity=entity,
+    )
     return state
 
 
@@ -367,6 +468,15 @@ def retrieve(state: AgentState) -> AgentState:
     entity = state.current_entity
     if entity is not None and entity in state.visited:
         state.needs_more_retrieval = False
+        _log_event(
+            "retrieve",
+            state,
+            entity=entity,
+            query_text=entity,
+            top_k=settings.retrieval_top_k,
+            chunks=[],
+            skipped_reason="already_visited",
+        )
         return state
 
     if entity is not None:
@@ -374,9 +484,20 @@ def retrieve(state: AgentState) -> AgentState:
         state.resolved_entities[entity] = chunks
         state.retrieved_context.extend(chunks)
         state.visited.add(entity)
+        query_text = entity
     else:
         chunks = _semantic_search_for_question(state.question)
         state.retrieved_context.extend(chunks)
+        query_text = state.question
+
+    _log_event(
+        "retrieve",
+        state,
+        entity=entity,
+        query_text=query_text,
+        top_k=settings.retrieval_top_k,
+        chunks=[_serialize_chunk(c) for c in chunks],
+    )
 
     return state
 
@@ -523,10 +644,31 @@ def extract_info(state: AgentState) -> AgentState:
         f"Wiki content:\n{context_text}"
     )
 
-    data = _extract_with_retry(user_message)
+    data = _extract_with_retry(user_message, state)
     if data is None:
-        return _handle_parse_failure(state)
-    return _apply_extract_result(data, state)
+        updated = _handle_parse_failure(state)
+        _log_event(
+            "extract_decision",
+            updated,
+            entity=entity,
+            next_entity=None,
+            prerequisite_chain=list(updated.prerequisite_chain),
+            needs_more_retrieval=updated.needs_more_retrieval,
+            parse_failed=True,
+        )
+        return updated
+    updated = _apply_extract_result(data, state)
+    _log_event(
+        "extract_decision",
+        updated,
+        entity=entity,
+        next_entity=data.get("next_entity"),
+        is_complete=bool(data.get("is_complete", False)),
+        prerequisite_chain=list(updated.prerequisite_chain),
+        needs_more_retrieval=updated.needs_more_retrieval,
+        key_facts=data.get("key_facts", []),
+    )
+    return updated
 
 
 def _strip_markdown_fences(text: str) -> str:
@@ -552,7 +694,7 @@ def _strip_markdown_fences(text: str) -> str:
 
 
 def _extract_with_retry(
-    user_message: str, max_attempts: int = 3
+    user_message: str, state: AgentState, max_attempts: int = 3
 ) -> dict[str, Any] | None:
     """Call the extract LLM with retries on JSON decode failure.
 
@@ -563,6 +705,8 @@ def _extract_with_retry(
 
     Args:
         user_message: The initial user content for the extract prompt.
+        state: Agent state, forwarded so each LLM call can be correlated
+            to the enclosing trace in the retrieval log.
         max_attempts: Total number of LLM calls allowed (default 3 =
             1 initial + 2 retries).
 
@@ -571,8 +715,12 @@ def _extract_with_retry(
     """
     current_message = user_message
     for attempt in range(1, max_attempts + 1):
-        response_text = _call_llm(
-            _EXTRACT_SYSTEM_PROMPT, current_message, json_mode=True
+        response_text = _call_llm_and_log(
+            _EXTRACT_SYSTEM_PROMPT,
+            current_message,
+            json_mode=True,
+            node="extract_info",
+            state=state,
         )
         cleaned = _strip_markdown_fences(response_text)
         try:
@@ -698,7 +846,20 @@ def synthesize_answer(state: AgentState) -> AgentState:
         f"Wiki content:\n{context_block}"
     )
 
-    state.final_answer = _call_llm(_SYNTHESIZE_SYSTEM_PROMPT, user_message)
+    state.final_answer = _call_llm_and_log(
+        _SYNTHESIZE_SYSTEM_PROMPT,
+        user_message,
+        json_mode=False,
+        node="synthesize_answer",
+        state=state,
+    )
+    _log_event(
+        "synthesize",
+        state,
+        kind="full",
+        final_answer=state.final_answer,
+        prerequisite_chain=list(state.prerequisite_chain),
+    )
     return state
 
 
@@ -736,5 +897,18 @@ def handle_iteration_limit(state: AgentState) -> AgentState:
         f"Wiki content retrieved:\n{context_block}"
     )
 
-    state.final_answer = _call_llm(_PARTIAL_SYSTEM_PROMPT, user_message)
+    state.final_answer = _call_llm_and_log(
+        _PARTIAL_SYSTEM_PROMPT,
+        user_message,
+        json_mode=False,
+        node="handle_iteration_limit",
+        state=state,
+    )
+    _log_event(
+        "synthesize",
+        state,
+        kind="partial",
+        final_answer=state.final_answer,
+        prerequisite_chain=list(state.prerequisite_chain),
+    )
     return state

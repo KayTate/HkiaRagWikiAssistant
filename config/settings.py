@@ -44,6 +44,10 @@ class Settings(BaseSettings):
     retrieval_top_k: int = 5
     retrieval_similarity_threshold: float = 0.7
 
+    # Retrieval logging
+    retrieval_log_enabled: bool = True
+    retrieval_log_file: str = "logs/retrieval.jsonl"
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
