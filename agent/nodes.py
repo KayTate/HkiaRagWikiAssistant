@@ -34,6 +34,22 @@ from vectorstore.client import (
 logger = logging.getLogger(__name__)
 _retrieval_logger = logging.getLogger("retrieval")
 
+_LEADING_ARTICLE_RE = re.compile(r"^(the|a|an)\s+", re.IGNORECASE)
+_TRAILING_DESCRIPTOR_RE = re.compile(
+    r"\s+(quest\s+series|quest|recipe|item|character|location|"
+    r"companion|ability|page|series)s?$",
+    re.IGNORECASE,
+)
+_TITLE_VARIANT_SUFFIXES: tuple[str, ...] = (
+    " (quest series)",
+    " (quest)",
+    " (character)",
+    " (item)",
+    " (location)",
+    " (ability)",
+    " (companion ability)",
+)
+
 
 def _log_event(event: str, state: AgentState, **fields: Any) -> None:
     """Emit one JSON-encoded retrieval observability event.
@@ -122,6 +138,7 @@ def _call_llm_and_log(
         latency_ms=latency_ms,
     )
     return response
+
 
 # ---------------------------------------------------------------------------
 # LLM helpers
@@ -405,13 +422,35 @@ def route_question(state: AgentState) -> AgentState:
     return state
 
 
+def _normalize_entity(raw: str) -> str:
+    """Strip leading articles and trailing descriptors from an extracted entity.
+
+    Iterates until stable because an entity can contain both (e.g.
+    'the Wild Mountain Time quest series' → 'Wild Mountain Time').
+
+    Args:
+        raw: Raw captured entity text from the regex extractor.
+
+    Returns:
+        Cleaned entity name. May be empty string if input was only
+        articles and descriptors.
+    """
+    entity = raw.strip().strip("\"'")
+    prev: str | None = None
+    while prev != entity:
+        prev = entity
+        entity = _LEADING_ARTICLE_RE.sub("", entity).strip()
+        entity = _TRAILING_DESCRIPTOR_RE.sub("", entity).strip()
+    return entity
+
+
 def _extract_entity_from_question(question: str) -> str | None:
     """Extract the most likely game entity name from a question.
 
     Uses simple heuristics: looks for quoted names first, then text
     following action verbs like 'craft', 'unlock', 'find', 'get', etc.
-    Returns None if no entity can be confidently identified — in that
-    case the retrieve node will fall back to semantic search.
+    All captures are normalized to strip articles and descriptors.
+    Returns None if no entity can be confidently identified.
 
     Args:
         question: The original user question string.
@@ -421,7 +460,8 @@ def _extract_entity_from_question(question: str) -> str | None:
     """
     quoted = re.findall(r'"([^"]+)"', question)
     if quoted:
-        return str(quoted[0])
+        cleaned = _normalize_entity(str(quoted[0]))
+        return cleaned or None
 
     patterns = [
         r"craft\s+(?:a\s+|an\s+)?(.+?)(?:\?|$|\.|\,)",
@@ -439,9 +479,8 @@ def _extract_entity_from_question(question: str) -> str | None:
     for pattern in patterns:
         match = re.search(pattern, question, re.IGNORECASE)
         if match:
-            entity = match.group(1).strip()
-            # Filter out common non-entity words
-            if entity.lower() not in {"i", "you", "the", "it", "this"}:
+            entity = _normalize_entity(match.group(1))
+            if entity and entity.lower() not in {"i", "you", "it", "this"}:
                 return entity
 
     return None
@@ -480,7 +519,7 @@ def retrieve(state: AgentState) -> AgentState:
         return state
 
     if entity is not None:
-        chunks = _fetch_entity_chunks(entity)
+        chunks = _fetch_entity_chunks(entity, state.question)
         state.resolved_entities[entity] = chunks
         state.retrieved_context.extend(chunks)
         state.visited.add(entity)
@@ -502,38 +541,130 @@ def retrieve(state: AgentState) -> AgentState:
     return state
 
 
-def _fetch_entity_chunks(entity: str) -> list[dict[str, Any]]:
-    """Retrieve all chunks for the named entity via exact page lookup.
+def _title_candidates(entity: str) -> list[str]:
+    """Return plausible wiki titles for an extracted entity.
 
-    Follows wiki redirect pages automatically — if the only chunk for a
-    page starts with "REDIRECT", the target page is fetched instead.
-    Falls back to semantic search if the page is not found.
+    Tries the entity as-is, with a leading 'The ' prefix (for pages where
+    the article is part of the canonical title — e.g. 'The Mystery Tree'),
+    and each form combined with common disambiguation suffixes.
+    Ordered most-likely-match first.
 
     Args:
-        entity: Exact page title to look up.
+        entity: Normalized entity name.
 
     Returns:
-        List of chunk dicts.
+        List of candidate wiki page titles to try in order.
+        Empty list if entity is empty.
     """
-    chunks = vs_get_page_by_title(entity)
-    if chunks:
+    cleaned = entity.strip()
+    if not cleaned:
+        return []
+
+    bases = [cleaned]
+    if not cleaned.lower().startswith("the "):
+        bases.append(f"The {cleaned}")
+
+    candidates: list[str] = []
+    for base in bases:
+        candidates.append(base)
+        candidates.extend(base + suffix for suffix in _TITLE_VARIANT_SUFFIXES)
+
+    seen: set[str] = set()
+    unique: list[str] = []
+    for c in candidates:
+        if c not in seen:
+            seen.add(c)
+            unique.append(c)
+    return unique
+
+
+def _resolve_title_via_opensearch(entity: str) -> str | None:
+    """Resolve an entity name to a canonical wiki title via MediaWiki opensearch.
+
+    Thin wrapper around the API client that isolates the agent from API
+    import concerns. Returns None on any failure — the caller treats
+    this as 'no resolution' and continues to semantic search.
+
+    Args:
+        entity: Normalized entity name.
+
+    Returns:
+        Canonical page title string, or None.
+    """
+    from ingestion.api_client import opensearch_title
+
+    try:
+        return opensearch_title(entity)
+    except Exception as exc:  # noqa: BLE001 — intentional broad catch
+        logger.warning("opensearch lookup failed for '%s': %s", entity, exc)
+        return None
+
+
+def _fetch_entity_chunks(
+    entity: str, question: str | None = None
+) -> list[dict[str, Any]]:
+    """Retrieve chunks for the named entity via exact page lookup with fallbacks.
+
+    Resolution order:
+    1. Try the entity and common disambiguation suffixes as exact titles.
+    2. Try 'The {entity}' and its suffix variants (for pages where 'The'
+       is part of the canonical title).
+    3. Call the MediaWiki opensearch API to resolve free-text to a
+       canonical page title, then look that up.
+    4. Fall back to semantic search using the full question as the query.
+
+    Follows wiki redirect pages automatically at any stage.
+
+    Args:
+        entity: Extracted entity name (already normalized).
+        question: The original user question; used for semantic fallback.
+
+    Returns:
+        List of chunk dicts. May be empty if every fallback fails.
+    """
+    for candidate in _title_candidates(entity):
+        chunks = vs_get_page_by_title(candidate)
+        if not chunks:
+            continue
+
         redirect_target = _extract_redirect_target(chunks)
         if redirect_target is not None:
-            logger.info(
-                "'%s' is a redirect to '%s'; following",
-                entity,
-                redirect_target,
-            )
+            logger.info("'%s' redirects to '%s'; following", candidate, redirect_target)
             redirected = vs_get_page_by_title(redirect_target)
             if redirected:
                 return redirected
+
+        if candidate != entity:
+            logger.info("Resolved '%s' to wiki page '%s'", entity, candidate)
         return chunks
 
+    resolved_title = _resolve_title_via_opensearch(entity)
+    if resolved_title is not None:
+        logger.info(
+            "opensearch resolved '%s' to canonical title '%s'",
+            entity,
+            resolved_title,
+        )
+        chunks = vs_get_page_by_title(resolved_title)
+        if chunks:
+            redirect_target = _extract_redirect_target(chunks)
+            if redirect_target is not None:
+                logger.info(
+                    "'%s' redirects to '%s'; following",
+                    resolved_title,
+                    redirect_target,
+                )
+                redirected = vs_get_page_by_title(redirect_target)
+                if redirected:
+                    return redirected
+            return chunks
+
     logger.info(
-        "Entity '%s' not found by title; falling back to semantic search",
+        "No title match for '%s' after all fallbacks; using semantic search",
         entity,
     )
-    embeddings = embed_chunks([entity])
+    search_query = question if question else entity
+    embeddings = embed_chunks([search_query])
     return vs_semantic_search(
         query_embedding=embeddings[0], top_k=settings.retrieval_top_k
     )

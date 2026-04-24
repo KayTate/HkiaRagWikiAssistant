@@ -56,9 +56,7 @@ def _get_with_retry(
     """
 
     @retry(
-        retry=retry_if_exception_type(
-            (requests.HTTPError, requests.ReadTimeout)
-        ),
+        retry=retry_if_exception_type((requests.HTTPError, requests.ReadTimeout)),
         wait=wait_exponential(multiplier=2, min=5, max=120),
         stop=stop_after_attempt(7),
         reraise=True,
@@ -187,18 +185,18 @@ def get_all_pages_with_revision_ids() -> list[dict[str, str | int]]:
             title = page.get("title", "")
             revisions = page.get("revisions", [])
             if title and revisions:
-                results.append({
-                    "title": title,
-                    "revision_id": int(revisions[0]["revid"]),
-                })
+                results.append(
+                    {
+                        "title": title,
+                        "revision_id": int(revisions[0]["revid"]),
+                    }
+                )
 
         if "continue" not in data:
             break
         params["gapcontinue"] = data["continue"]["gapcontinue"]
 
-    logger.info(
-        "Fetched %d pages with revision IDs from wiki", len(results)
-    )
+    logger.info("Fetched %d pages with revision IDs from wiki", len(results))
     return results
 
 
@@ -240,6 +238,67 @@ def get_pages_wikitext_batch(titles: list[str]) -> dict[str, str]:
             result[title] = str(revisions[0]["*"])
 
     return result
+
+
+def opensearch_title(query: str, limit: int = 3) -> str | None:
+    """Resolve a free-text query to a canonical wiki page title.
+
+    Calls the MediaWiki opensearch endpoint, which performs prefix and
+    fuzzy matching against page titles. Used by the agent when exact
+    title variants all fail, before falling back to semantic search.
+
+    Restricts to namespace 0 (main articles) to exclude Talk, User, etc.
+
+    Args:
+        query: Free-text entity name, e.g. 'Mystery Tree' or 'apple orchard'.
+        limit: Max results to request from the API (we only use the first).
+
+    Returns:
+        The best-match canonical page title, or None if no match or on error.
+        Errors are logged and swallowed — this is a best-effort fallback
+        and must not raise into the agent's retrieval path.
+    """
+
+    @retry(
+        retry=retry_if_exception_type((requests.HTTPError, requests.ReadTimeout)),
+        wait=wait_exponential(multiplier=2, min=5, max=120),
+        stop=stop_after_attempt(7),
+        reraise=True,
+    )
+    def _do_request() -> list:  # type: ignore[type-arg]
+        time.sleep(settings.wiki_request_delay_seconds)
+        response = requests.get(
+            settings.wiki_api_url,
+            params={
+                "action": "opensearch",
+                "search": query,
+                "limit": str(limit),
+                "namespace": "0",
+                "format": "json",
+            },
+            timeout=30,
+        )
+        if response.status_code in _TRANSIENT_STATUS_CODES:
+            response.raise_for_status()
+        response.raise_for_status()
+        return response.json()  # type: ignore[no-any-return]
+
+    try:
+        data = _do_request()
+        if not isinstance(data, list) or len(data) < 2:
+            logger.warning(
+                "opensearch returned unexpected shape for query '%s': %r",
+                query,
+                data,
+            )
+            return None
+        titles = data[1]
+        if not isinstance(titles, list) or not titles:
+            return None
+        return str(titles[0])
+    except Exception as exc:  # noqa: BLE001 — best-effort fallback
+        logger.warning("opensearch lookup failed for query '%s': %s", query, exc)
+        return None
 
 
 def get_page_revision_id(page_title: str) -> int:
