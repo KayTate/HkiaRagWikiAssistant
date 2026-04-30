@@ -157,6 +157,7 @@ hkia-rag/
 │   ├── graph.py                # State graph definition and compilation
 │   ├── state.py                # AgentState dataclass
 │   ├── nodes.py                # Graph node functions (route, retrieve, extract, synthesize)
+│   ├── llm.py                  # LLM provider clients (Ollama, OpenAI, Anthropic) + retries
 │   └── prompts.py              # System prompt strings used by the LLM-driven nodes
 ├── eval/                       # Evaluation pipeline
 │   ├── dataset.py              # Dataset loading and validation
