@@ -22,7 +22,7 @@ class Settings(BaseSettings):
 
     # LLM
     llm_provider: Literal["ollama", "openai", "anthropic"] = "openai"
-    llm_model: str = "gpt-5.4-mini"
+    llm_model: str = "gpt-4o-mini"
     anthropic_api_key: str = ""
 
     # LangGraph

@@ -72,7 +72,8 @@ def _current_embedding_model() -> str:
 def verify_collection_embedding_model() -> None:
     """Verify that the ChromaDB collection uses the current embedding model.
 
-    Samples up to 10 random chunks from the collection. If any chunk was
+    Samples up to 10 chunks from the collection (the first N rows in
+    insertion order, not a random sample). If any sampled chunk was
     embedded with a different model than the one currently configured,
     raises EmbeddingModelMismatchError with remediation steps.
 

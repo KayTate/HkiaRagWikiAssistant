@@ -163,9 +163,10 @@ _WIKITEXT_BATCH_SIZE = 20
 def _process_pending_pages() -> None:
     """Run the per-page ingestion loop for all pages with status='pending'.
 
-    Fetches wikitext in batches of 50 pages via the batch API to minimize
-    the number of wiki requests. Pages that fail mid-ingestion remain in
-    'in_progress' state and will be retried on the next run.
+    Fetches wikitext in batches of _WIKITEXT_BATCH_SIZE pages via the batch
+    API to minimize the number of wiki requests. Pages that fail
+    mid-ingestion remain in 'in_progress' state and will be retried on
+    the next run.
     """
     pending = state_db.get_pages_by_status("pending")
     logger.info("Processing %d pending pages", len(pending))

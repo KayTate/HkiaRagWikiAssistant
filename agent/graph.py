@@ -1,8 +1,9 @@
 """LangGraph graph definition for the HKIA RAG agent.
 
 Builds and compiles the state graph that drives multi-step prerequisite
-chain resolution. MLflow autolog is enabled at module import so every
-agent invocation produces a trace automatically.
+chain resolution. MLflow autolog is enabled lazily inside compile_graph
+(not at module import) so every agent invocation produces a trace while
+still allowing tests to patch mlflow before compilation.
 """
 
 from typing import Any

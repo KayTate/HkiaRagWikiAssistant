@@ -70,7 +70,7 @@ Key settings:
 | `EMBEDDING_PROVIDER` | `ollama` | `ollama` or `openai` |
 | `EMBEDDING_MODEL` | `nomic-embed-text` | Embedding model name |
 | `LLM_PROVIDER` | `openai` | `ollama`, `openai`, or `anthropic` |
-| `LLM_MODEL` | `gpt-5.4-mini` | LLM model name |
+| `LLM_MODEL` | `gpt-4o-mini` | LLM model name |
 | `OPENAI_API_KEY` | (empty) | Required if using OpenAI |
 | `ANTHROPIC_API_KEY` | (empty) | Required if using Anthropic |
 
