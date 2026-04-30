@@ -9,10 +9,16 @@ from typing import Any
 import requests
 
 from agent.nodes import (
+    _extract_redirect_target,
     _fetch_entity_chunks,
     _normalize_entity,
     _title_candidates,
 )
+
+
+def _redirect_chunks(text: str) -> list[dict[str, Any]]:
+    """Build a single-chunk fixture for _extract_redirect_target tests."""
+    return [{"text": text, "metadata": {"source_title": "Source", "chunk_index": 0}}]
 
 
 def test_normalize_entity_strips_article_and_descriptor() -> None:
@@ -195,3 +201,74 @@ def test_opensearch_failure_does_not_raise(mocker: Any) -> None:
     assert result == [{"text": "fallback", "metadata": {}}]
     embed_mock.assert_called_once()
     search_mock.assert_called_once()
+
+
+def test_extract_redirect_target_canonical_format() -> None:
+    """The canonical 'REDIRECT Target' form must resolve to the target title."""
+    assert _extract_redirect_target(_redirect_chunks("REDIRECT Woodblock")) == (
+        "Woodblock"
+    )
+
+
+def test_extract_redirect_target_is_case_insensitive() -> None:
+    """Lower- and mixed-case REDIRECT keywords must still be detected."""
+    assert _extract_redirect_target(_redirect_chunks("redirect Woodblock")) == (
+        "Woodblock"
+    )
+    assert _extract_redirect_target(_redirect_chunks("Redirect Woodblock")) == (
+        "Woodblock"
+    )
+
+
+def test_extract_redirect_target_rejects_redirecting_prefix() -> None:
+    """Prose starting with 'REDIRECTING' must not be parsed as a redirect.
+
+    The old implementation used startswith('REDIRECT') which matched any
+    word beginning with those eight letters and then sliced everything
+    past them as the 'target'. The word boundary in the regex closes
+    that hole.
+    """
+    chunks = _redirect_chunks("REDIRECTING players to the next quest hub.")
+    assert _extract_redirect_target(chunks) is None
+
+
+def test_extract_redirect_target_rejects_redirected_prefix() -> None:
+    """Same false-positive class — 'REDIRECTED from ...' must not match."""
+    chunks = _redirect_chunks("REDIRECTED from an old name.")
+    assert _extract_redirect_target(chunks) is None
+
+
+def test_extract_redirect_target_requires_whitespace_after_keyword() -> None:
+    """REDIRECT must be followed by whitespace, not punctuation or letters.
+
+    Guards against a chunk like 'REDIRECTOR' (no boundary, all letters)
+    or 'REDIRECT.Target' (boundary, but no whitespace before the title).
+    """
+    assert _extract_redirect_target(_redirect_chunks("REDIRECTOR")) is None
+    assert _extract_redirect_target(_redirect_chunks("REDIRECT.Target")) is None
+
+
+def test_extract_redirect_target_stops_at_first_newline() -> None:
+    """Trailing content after a newline must not be slurped into the target."""
+    chunks = _redirect_chunks("REDIRECT Woodblock\nResidual category text.")
+    assert _extract_redirect_target(chunks) == "Woodblock"
+
+
+def test_extract_redirect_target_returns_none_for_non_redirect() -> None:
+    """A normal page chunk must not be mistaken for a redirect."""
+    chunks = _redirect_chunks("Woodblock is a crafting material.")
+    assert _extract_redirect_target(chunks) is None
+
+
+def test_extract_redirect_target_returns_none_for_multi_chunk_pages() -> None:
+    """Redirect pages should always parse to one chunk; reject anything else.
+
+    A multi-chunk result implies the upstream parser/chunker produced
+    something other than a canonical redirect, and we'd rather skip the
+    redirect-follow path than guess at which chunk holds the target.
+    """
+    chunks = [
+        {"text": "REDIRECT Woodblock", "metadata": {"chunk_index": 0}},
+        {"text": "Some other content.", "metadata": {"chunk_index": 1}},
+    ]
+    assert _extract_redirect_target(chunks) is None

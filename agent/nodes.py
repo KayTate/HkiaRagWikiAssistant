@@ -42,6 +42,12 @@ _TRAILING_DESCRIPTOR_RE = re.compile(
     r"companion|ability|page|series)s?$",
     re.IGNORECASE,
 )
+# Matches the canonical post-strip_code form of a MediaWiki redirect page:
+# wikitext "#REDIRECT [[Target]]" → "REDIRECT Target" after stripping markup.
+# The \b after REDIRECT rules out false positives like REDIRECTING /
+# REDIRECTED / REDIRECTLY, and [^\n]+ caps the captured title at the first
+# newline so trailing parsed content does not get slurped in.
+_REDIRECT_RE = re.compile(r"^\s*REDIRECT\b\s+([^\n]+)", re.IGNORECASE)
 _TITLE_VARIANT_SUFFIXES: tuple[str, ...] = (
     " (quest series)",
     " (quest)",
@@ -794,8 +800,11 @@ def _resolve_entity_chunks(
 def _extract_redirect_target(chunks: list[dict[str, Any]]) -> str | None:
     """Detect if chunks represent a wiki redirect and extract the target.
 
-    A redirect page has a single chunk whose text starts with 'REDIRECT'
-    followed by the target page title.
+    A redirect page has a single chunk whose text matches the canonical
+    post-strip_code form ``REDIRECT <target>`` (with whitespace between
+    the keyword and the title). Match is case-insensitive but requires a
+    word boundary after REDIRECT so prose pages starting with words like
+    "Redirecting" or "Redirected" are not misclassified as redirects.
 
     Args:
         chunks: Chunks retrieved for a page.
@@ -806,11 +815,11 @@ def _extract_redirect_target(chunks: list[dict[str, Any]]) -> str | None:
     if len(chunks) != 1:
         return None
     text = str(chunks[0].get("text", "")).strip()
-    if text.upper().startswith("REDIRECT"):
-        target = text[len("REDIRECT") :].strip()
-        if target:
-            return target
-    return None
+    match = _REDIRECT_RE.match(text)
+    if match is None:
+        return None
+    target = match.group(1).strip()
+    return target or None
 
 
 def _semantic_search_for_question(question: str) -> list[dict[str, Any]]:
