@@ -157,12 +157,19 @@ def _process_pending_pages() -> None:
     """Run the per-page ingestion loop for all pages with status='pending'.
 
     Fetches wikitext in batches of _WIKITEXT_BATCH_SIZE pages via the batch
-    API to minimize the number of wiki requests. Pages that fail
-    mid-ingestion remain in 'in_progress' state and will be retried on
-    the next run.
+    API to minimize the number of wiki requests. Per-page failures are
+    caught so the rest of the run still processes — the failing page
+    keeps its 'in_progress' status and is retried on the next run.
+    Batch-level errors (wikitext fetch failures, embedding-model
+    mismatch) propagate, since those signal a wiki- or
+    configuration-wide problem where continuing would just produce more
+    of the same error.
     """
     pending = state_db.get_pages_by_status("pending")
     logger.info("Processing %d pending pages", len(pending))
+
+    succeeded = 0
+    failed = 0
 
     for start in range(0, len(pending), _WIKITEXT_BATCH_SIZE):
         batch = pending[start : start + _WIKITEXT_BATCH_SIZE]
@@ -174,8 +181,20 @@ def _process_pending_pages() -> None:
             wikitext = wikitext_map.get(title)
             if wikitext is None:
                 logger.warning("No wikitext returned for '%s', skipping", title)
+                failed += 1
                 continue
-            _ingest_page(title, page["revision_id"], wikitext)
+            try:
+                _ingest_page(title, page["revision_id"], wikitext)
+                succeeded += 1
+            except Exception:
+                # _ingest_page already logged via logger.exception with
+                # full context; status remains 'in_progress' and the
+                # page will be retried on the next run.
+                failed += 1
+
+    logger.info(
+        "Ingestion complete: %d pages succeeded, %d failed", succeeded, failed
+    )
 
 
 def _ingest_page(page_title: str, revision_id: int, wikitext: str) -> None:

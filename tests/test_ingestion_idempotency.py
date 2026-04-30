@@ -10,8 +10,6 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
 
-import pytest
-
 from ingestion.embedder import EmbeddingError
 
 
@@ -202,8 +200,9 @@ def test_rerun_after_failure_produces_no_duplicates(mocker: Any) -> None:
         from ingestion.pipeline import run_full_ingestion
         from ingestion.state_db import get_page, get_pages_by_status
 
-        with pytest.raises(EmbeddingError):
-            run_full_ingestion()
+        # Per-page failures must not halt the batch loop; the failing
+        # page is left in_progress and the run completes normally.
+        run_full_ingestion()
 
         complete_pages = get_pages_by_status("complete")
         in_progress_pages = get_pages_by_status("in_progress")
@@ -321,8 +320,9 @@ def test_status_transitions_correctly(mocker: Any) -> None:
         from ingestion.pipeline import run_full_ingestion
         from ingestion.state_db import get_page
 
-        with pytest.raises(EmbeddingError):
-            run_full_ingestion()
+        # Per-page failures must not halt the batch loop; the run
+        # completes and Zeta_Fail is left in_progress for retry.
+        run_full_ingestion()
 
         success_state = get_page("Alpha_Success")
         fail_state = get_page("Zeta_Fail")
@@ -375,3 +375,88 @@ def test_status_transitions_correctly(mocker: Any) -> None:
         assert final_success["status"] == "complete"
         assert final_fail is not None
         assert final_fail["status"] == "complete"
+
+
+def test_failure_does_not_halt_subsequent_pages(mocker: Any) -> None:
+    """A failing page must not stop later pages in the batch from processing.
+
+    Sets up three pages — Alpha, Beta, Gamma — and fails the embedder
+    on the second call (Beta). Before this fix, _ingest_page re-raised
+    and _process_pending_pages did not catch, so the loop aborted with
+    Gamma still in 'pending'. After the fix, Beta is left in_progress
+    and the loop continues, so Gamma must end up complete in the same
+    run. The order matters: pages are processed alphabetically because
+    state_db.get_pages_by_status sorts by page_title.
+    """
+    with tempfile.TemporaryDirectory() as tmpdir:
+        db_path = str(Path(tmpdir) / "state.db")
+        chroma_path = str(Path(tmpdir) / "chroma")
+
+        mocker.patch("config.settings.settings.state_db_path", db_path)
+        mocker.patch("config.settings.settings.chroma_persist_dir", chroma_path)
+        mocker.patch("config.settings.settings.embedding_model", "nomic-embed-text")
+        mocker.patch("config.settings.settings.embedding_model_version", "v1.5")
+        mocker.patch("config.settings.settings.chunking_strategy", "recursive")
+        mocker.patch("config.settings.settings.chunk_size", 512)
+        mocker.patch("config.settings.settings.chunk_overlap", 64)
+
+        fake_collection = _make_fake_collection()
+        mocker.patch(
+            "vectorstore.client.get_or_create_collection",
+            return_value=fake_collection,
+        )
+
+        mocker.patch(
+            "ingestion.api_client.get_all_pages_with_revision_ids",
+            return_value=[
+                {"title": "Alpha", "revision_id": 1},
+                {"title": "Beta", "revision_id": 1},
+                {"title": "Gamma", "revision_id": 1},
+            ],
+        )
+        mocker.patch(
+            "ingestion.api_client.get_pages_wikitext_batch",
+            return_value={
+                "Alpha": "Alpha content.",
+                "Beta": "Beta content.",
+                "Gamma": "Gamma content.",
+            },
+        )
+
+        call_count = {"n": 0}
+
+        def embed_side_effect(chunks: list[str]) -> list[list[float]]:
+            call_count["n"] += 1
+            # Beta is alphabetically second; fail its embedding call so
+            # Gamma's call (third) only runs if the loop survives.
+            if call_count["n"] == 2:
+                raise EmbeddingError("Simulated failure for Beta")
+            return [[0.1] * 4 for _ in chunks]
+
+        mocker.patch(
+            "ingestion.embedder.embed_chunks", side_effect=embed_side_effect
+        )
+
+        from ingestion.pipeline import run_full_ingestion
+        from ingestion.state_db import get_page
+
+        run_full_ingestion()
+
+        alpha = get_page("Alpha")
+        beta = get_page("Beta")
+        gamma = get_page("Gamma")
+
+        assert alpha is not None and alpha["status"] == "complete"
+        assert beta is not None and beta["status"] == "in_progress", (
+            "Beta failed embedding; must be left in_progress for retry"
+        )
+        assert gamma is not None and gamma["status"] == "complete", (
+            "Gamma must still be processed after Beta's failure — "
+            "regression of the per-page-failure-halts-batch bug"
+        )
+        # Embedder must be called exactly three times: one per page.
+        # If the loop short-circuited after Beta's failure, Gamma's
+        # call would never happen and the count would be 2.
+        assert call_count["n"] == 3, (
+            f"Expected 3 embedder calls (one per page), got {call_count['n']}"
+        )
