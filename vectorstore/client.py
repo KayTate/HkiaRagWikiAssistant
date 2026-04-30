@@ -1,6 +1,7 @@
 """ChromaDB client interface for the HKIA RAG vector store."""
 
 import logging
+import random
 from typing import Any
 
 import chromadb
@@ -11,6 +12,8 @@ from config.settings import settings
 from vectorstore.schema import ChunkMetadata
 
 logger = logging.getLogger(__name__)
+
+_MODEL_VERIFY_SAMPLE_SIZE = 10
 
 
 class EmbeddingModelMismatchError(RuntimeError):
@@ -72,10 +75,16 @@ def _current_embedding_model() -> str:
 def verify_collection_embedding_model() -> None:
     """Verify that the ChromaDB collection uses the current embedding model.
 
-    Samples up to 10 chunks from the collection (the first N rows in
-    insertion order, not a random sample). If any sampled chunk was
-    embedded with a different model than the one currently configured,
-    raises EmbeddingModelMismatchError with remediation steps.
+    Draws a uniform random sample of up to _MODEL_VERIFY_SAMPLE_SIZE
+    chunks from the collection. If any sampled chunk was embedded with
+    a different model than the one currently configured, raises
+    EmbeddingModelMismatchError with remediation steps.
+
+    Random sampling matters: a partial re-ingest could leave the
+    collection with stale-model chunks at one end and current-model
+    chunks at the other. Sampling the first N rows in insertion order
+    (ChromaDB's default behaviour) would systematically miss drift on
+    one side of that boundary.
 
     Raises:
         EmbeddingModelMismatchError: If the collection contains chunks from
@@ -88,8 +97,17 @@ def verify_collection_embedding_model() -> None:
     if count == 0:
         return
 
-    sample_size = min(10, count)
-    results = collection.get(limit=sample_size, include=["metadatas"])
+    # Two-step fetch: get all IDs first (cheap — short strings), then
+    # random.sample and look up metadatas for just the chosen IDs. This
+    # avoids loading every chunk's full metadata while still giving a
+    # uniform sample across the collection.
+    all_ids: list[str] = collection.get(include=[]).get("ids") or []
+    if not all_ids:
+        return
+    sample_size = min(_MODEL_VERIFY_SAMPLE_SIZE, len(all_ids))
+    sampled_ids = random.sample(all_ids, sample_size)
+
+    results = collection.get(ids=sampled_ids, include=["metadatas"])
     metadatas: list[Any] = results.get("metadatas") or []
 
     current_model = _current_embedding_model()
