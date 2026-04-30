@@ -24,6 +24,11 @@ class Settings(BaseSettings):
     llm_provider: Literal["ollama", "openai", "anthropic"] = "openai"
     llm_model: str = "gpt-4o-mini"
     anthropic_api_key: str = ""
+    # Ollama runs locally; the default suits small/medium models and bounds
+    # worst-case stall time when a process hangs. Bump for large local
+    # models (e.g. 70B) where a single completion can legitimately exceed
+    # three minutes.
+    ollama_request_timeout_seconds: int = 180
 
     # LangGraph
     agent_max_iterations: int = 10

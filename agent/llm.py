@@ -20,6 +20,7 @@ from typing import Any
 import requests
 from tenacity import (
     retry,
+    retry_if_exception,
     retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
@@ -28,6 +29,26 @@ from tenacity import (
 from config.settings import settings
 
 logger = logging.getLogger(__name__)
+
+# Status codes that warrant a retry. 429 is rate-limiting; 5xx are
+# server-side transient errors. Auth/permission/not-found errors (401,
+# 403, 404) are excluded on purpose — they will not resolve themselves
+# during the backoff window and would just burn the retry budget.
+_TRANSIENT_STATUS_CODES = {429, 500, 502, 503, 504}
+
+
+def _is_transient_http_error(exc: BaseException) -> bool:
+    """Tenacity retry predicate: True only for transient HTTP responses.
+
+    Replaces the previous ``retry_if_exception_type(requests.HTTPError)``
+    which retried every HTTP error indiscriminately, including
+    permanent failures like 401 Unauthorized. Those would burn five
+    attempts × up to 60s of exponential backoff before re-raising the
+    same error, with no chance of recovery.
+    """
+    if isinstance(exc, requests.HTTPError) and exc.response is not None:
+        return exc.response.status_code in _TRANSIENT_STATUS_CODES
+    return False
 
 
 def _call_llm(system_prompt: str, user_message: str, json_mode: bool = False) -> str:
@@ -115,8 +136,18 @@ def _call_ollama_with_retry(system_prompt: str, user_message: str) -> str:
         ],
         "stream": False,
     }
+    # Ollama runs locally; a healthy small/medium-model completion
+    # finishes in seconds. The 5-minute hard-coded timeout this replaces
+    # used to mean a single hung process could stall the agent for ~150
+    # minutes across the iteration × parse-retry budget. The setting
+    # default (180s) covers the longest legitimate small-model
+    # generation while bounding worst-case stall time; users running
+    # large local models (70B and up) can raise it via
+    # OLLAMA_REQUEST_TIMEOUT_SECONDS without touching code.
     try:
-        response = requests.post(url, json=payload, timeout=300)
+        response = requests.post(
+            url, json=payload, timeout=settings.ollama_request_timeout_seconds
+        )
         response.raise_for_status()
         data: dict[str, Any] = response.json()
         return str(data["message"]["content"])
@@ -153,7 +184,7 @@ def _call_openai(system_prompt: str, user_message: str, json_mode: bool = False)
 
 
 @retry(
-    retry=retry_if_exception_type(requests.HTTPError),
+    retry=retry_if_exception(_is_transient_http_error),
     wait=wait_exponential(multiplier=2, min=2, max=60),
     stop=stop_after_attempt(5),
     reraise=True,
@@ -199,7 +230,11 @@ def _call_openai_with_retry(
         )
         if response.status_code == 429:
             logger.warning("OpenAI rate limit hit, will retry with backoff")
-            response.raise_for_status()
+        elif 500 <= response.status_code < 600:
+            logger.warning(
+                "OpenAI server error %d, will retry with backoff",
+                response.status_code,
+            )
         response.raise_for_status()
         data: dict[str, Any] = response.json()
         return str(data["choices"][0]["message"]["content"])
@@ -237,7 +272,7 @@ def _call_anthropic(system_prompt: str, user_message: str) -> str:
 
 
 @retry(
-    retry=retry_if_exception_type(requests.HTTPError),
+    retry=retry_if_exception(_is_transient_http_error),
     wait=wait_exponential(multiplier=2, min=2, max=60),
     stop=stop_after_attempt(5),
     reraise=True,
@@ -279,7 +314,11 @@ def _call_anthropic_with_retry(system_prompt: str, user_message: str) -> str:
         )
         if response.status_code == 429:
             logger.warning("Anthropic rate limit hit, will retry with backoff")
-            response.raise_for_status()
+        elif 500 <= response.status_code < 600:
+            logger.warning(
+                "Anthropic server error %d, will retry with backoff",
+                response.status_code,
+            )
         response.raise_for_status()
         data: dict[str, Any] = response.json()
         return str(data["content"][0]["text"])

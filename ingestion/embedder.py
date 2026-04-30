@@ -9,6 +9,7 @@ import logging
 import requests
 from tenacity import (
     retry,
+    retry_if_exception,
     retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
@@ -17,6 +18,23 @@ from tenacity import (
 from config.settings import settings
 
 logger = logging.getLogger(__name__)
+
+# Mirrors agent.llm and ingestion.api_client. Duplicated locally to
+# keep this module decoupled from its siblings; a follow-up refactor
+# can pull these into a shared HTTP helper.
+_TRANSIENT_STATUS_CODES = {429, 500, 502, 503, 504}
+
+
+def _is_transient_http_error(exc: BaseException) -> bool:
+    """Tenacity retry predicate: True only for transient HTTP responses.
+
+    Replaces the previous ``retry_if_exception_type(requests.HTTPError)``
+    which retried any HTTP error — including 401/403/404 — through five
+    attempts of exponential backoff before giving up.
+    """
+    if isinstance(exc, requests.HTTPError) and exc.response is not None:
+        return exc.response.status_code in _TRANSIENT_STATUS_CODES
+    return False
 
 
 class EmbeddingError(RuntimeError):
@@ -142,7 +160,7 @@ def openai_embed(chunks: list[str]) -> list[list[float]]:
 
 
 @retry(
-    retry=retry_if_exception_type(requests.HTTPError),
+    retry=retry_if_exception(_is_transient_http_error),
     wait=wait_exponential(multiplier=2, min=2, max=60),
     stop=stop_after_attempt(5),
     reraise=True,
@@ -175,7 +193,11 @@ def _embed_batch_openai(batch: list[str]) -> list[list[float]]:
         )
         if response.status_code == 429:
             logger.warning("OpenAI rate limit hit, will retry with backoff")
-            response.raise_for_status()
+        elif 500 <= response.status_code < 600:
+            logger.warning(
+                "OpenAI server error %d, will retry with backoff",
+                response.status_code,
+            )
         response.raise_for_status()
         # response.json() returns Any; API response shape is external/untyped
         data = response.json()

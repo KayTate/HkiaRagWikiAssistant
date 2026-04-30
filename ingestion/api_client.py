@@ -11,7 +11,7 @@ import time
 import requests
 from tenacity import (
     retry,
-    retry_if_exception_type,
+    retry_if_exception,
     stop_after_attempt,
     wait_exponential,
 )
@@ -32,6 +32,20 @@ def _is_transient_http_error(exc: BaseException) -> bool:
     if isinstance(exc, requests.HTTPError) and exc.response is not None:
         return exc.response.status_code in _TRANSIENT_STATUS_CODES
     return False
+
+
+def _should_retry_request(exc: BaseException) -> bool:
+    """Tenacity retry predicate: transient HTTP responses or read timeouts.
+
+    Combines the status-code filter with ReadTimeout, which is always
+    worth retrying. Replaces the previous
+    ``retry_if_exception_type((requests.HTTPError, requests.ReadTimeout))``
+    so non-transient HTTP errors (401/403/404) skip the backoff budget
+    and propagate immediately.
+    """
+    if isinstance(exc, requests.ReadTimeout):
+        return True
+    return _is_transient_http_error(exc)
 
 
 def _get_with_retry(
@@ -64,7 +78,7 @@ def _get_with_retry(
     # patient for the agent's read path — opensearch_title below uses a
     # much tighter budget for that reason.
     @retry(
-        retry=retry_if_exception_type((requests.HTTPError, requests.ReadTimeout)),
+        retry=retry_if_exception(_should_retry_request),
         wait=wait_exponential(multiplier=2, min=5, max=120),
         stop=stop_after_attempt(7),
         reraise=True,
@@ -76,8 +90,6 @@ def _get_with_retry(
             params=params,
             timeout=timeout,
         )
-        if response.status_code in _TRANSIENT_STATUS_CODES:
-            response.raise_for_status()
         response.raise_for_status()
         return response.json()  # type: ignore[no-any-return]
 
@@ -282,7 +294,7 @@ def opensearch_title(query: str, limit: int = 3) -> str | None:
     # path uses _get_with_retry above, which is tuned much more
     # generously because batch jobs can afford to wait.
     @retry(
-        retry=retry_if_exception_type((requests.HTTPError, requests.ReadTimeout)),
+        retry=retry_if_exception(_should_retry_request),
         wait=wait_exponential(multiplier=1, min=2, max=15),
         stop=stop_after_attempt(3),
         reraise=True,
@@ -300,8 +312,6 @@ def opensearch_title(query: str, limit: int = 3) -> str | None:
             },
             timeout=30,
         )
-        if response.status_code in _TRANSIENT_STATUS_CODES:
-            response.raise_for_status()
         response.raise_for_status()
         return response.json()  # type: ignore[no-any-return]
 
