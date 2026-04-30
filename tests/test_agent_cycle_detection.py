@@ -137,6 +137,7 @@ def test_agent_stops_on_circular_prerequisites(mocker: Any) -> None:
 
     mocker.patch("agent.nodes._call_llm", side_effect=mock_call_llm)
     mocker.patch("agent.graph.mlflow")
+    mocker.patch("agent.nodes.mlflow")
 
     from agent.graph import compile_graph
 
@@ -202,6 +203,7 @@ def test_agent_respects_max_iterations(mocker: Any) -> None:
 
     mocker.patch("agent.nodes._call_llm", side_effect=mock_call_llm)
     mocker.patch("agent.graph.mlflow")
+    mocker.patch("agent.nodes.mlflow")
 
     from agent.graph import compile_graph
     from config.settings import settings
@@ -270,6 +272,7 @@ def test_agent_continues_on_persistent_parse_failure(mocker: Any, caplog: Any) -
 
     mocker.patch("agent.nodes._call_llm", side_effect=mock_call_llm)
     mocker.patch("agent.graph.mlflow")
+    mocker.patch("agent.nodes.mlflow")
 
     from agent.graph import compile_graph
     from config.settings import settings

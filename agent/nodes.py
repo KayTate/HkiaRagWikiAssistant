@@ -13,7 +13,9 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
+import mlflow
 import requests
+from mlflow.entities import Document, SpanType
 from tenacity import (
     retry,
     retry_if_exception_type,
@@ -371,6 +373,31 @@ def _format_chunks(chunks: list[dict[str, Any]]) -> str:
     return "\n\n".join(c.get("text", "") for c in chunks if c.get("text"))
 
 
+def _chunks_to_documents(chunks: list[dict[str, Any]]) -> list[Document]:
+    """Convert agent chunk dicts to MLflow Document entities for span outputs.
+
+    The agent uses ``{"text": ..., "metadata": ...}`` internally, but
+    MLflow's RetrievalGroundedness scorer reads RETRIEVER spans by
+    looking for documents with ``page_content``. This helper bridges the
+    two formats at the span boundary so traces are scorable without
+    changing the chunk shape that downstream nodes consume.
+
+    Args:
+        chunks: Retrieved chunk dicts as produced by vectorstore.client.
+
+    Returns:
+        List of Document entities with page_content sourced from each
+        chunk's 'text' field and metadata copied through unchanged.
+    """
+    return [
+        Document(
+            page_content=str(c.get("text", "")),
+            metadata=dict(c.get("metadata") or {}),
+        )
+        for c in chunks
+    ]
+
+
 def _build_context_block(state: AgentState) -> str:
     """Assemble all retrieved context into a single block for synthesis.
 
@@ -615,6 +642,38 @@ def _fetch_entity_chunks(
 
     Follows wiki redirect pages automatically at any stage.
 
+    Wrapped in a single RETRIEVER span so the trace records exactly the
+    chunks the LLM will see — redirect-follow and semantic-search
+    fallbacks are implementation details of one logical retrieval and
+    must not produce sibling retriever spans (the RetrievalGroundedness
+    scorer would otherwise score against chunks the LLM never received).
+
+    Args:
+        entity: Extracted entity name (already normalized).
+        question: The original user question; used for semantic fallback.
+
+    Returns:
+        List of chunk dicts. May be empty if every fallback fails.
+    """
+    with mlflow.start_span(
+        name="fetch_entity_chunks", span_type=SpanType.RETRIEVER
+    ) as span:
+        span.set_inputs({"entity": entity, "question": question})
+        chunks = _resolve_entity_chunks(entity, question)
+        span.set_outputs(_chunks_to_documents(chunks))
+        return chunks
+
+
+def _resolve_entity_chunks(
+    entity: str, question: str | None = None
+) -> list[dict[str, Any]]:
+    """Inner resolution logic for ``_fetch_entity_chunks`` (untraced).
+
+    Separated so the public entry point can wrap the full resolution
+    flow in one outer RETRIEVER span without nesting smaller spans for
+    each fallback path. See ``_fetch_entity_chunks`` for the resolution
+    order and behaviour.
+
     Args:
         entity: Extracted entity name (already normalized).
         question: The original user question; used for semantic fallback.
@@ -695,16 +754,27 @@ def _extract_redirect_target(chunks: list[dict[str, Any]]) -> str | None:
 def _semantic_search_for_question(question: str) -> list[dict[str, Any]]:
     """Run semantic search using the full question as the query.
 
+    Wrapped in a RETRIEVER span so the chunks reach
+    MLflow's RetrievalGroundedness scorer in the canonical document
+    shape. Span output mirrors the function's return value, converted
+    via ``_chunks_to_documents`` at the boundary.
+
     Args:
         question: The user's original question.
 
     Returns:
         List of chunk dicts from the vector store.
     """
-    embeddings = embed_chunks([question])
-    return vs_semantic_search(
-        query_embedding=embeddings[0], top_k=settings.retrieval_top_k
-    )
+    with mlflow.start_span(
+        name="semantic_search_for_question", span_type=SpanType.RETRIEVER
+    ) as span:
+        span.set_inputs({"question": question})
+        embeddings = embed_chunks([question])
+        chunks = vs_semantic_search(
+            query_embedding=embeddings[0], top_k=settings.retrieval_top_k
+        )
+        span.set_outputs(_chunks_to_documents(chunks))
+        return chunks
 
 
 _EXTRACT_SYSTEM_PROMPT = (
