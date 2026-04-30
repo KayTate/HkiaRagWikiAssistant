@@ -159,6 +159,7 @@ hkia-rag/
 │   ├── nodes.py                # Graph node functions (route, retrieve, extract, synthesize)
 │   ├── llm.py                  # LLM provider clients (Ollama, OpenAI, Anthropic) + retries
 │   ├── extraction.py           # Pure text helpers: entity extraction, fence stripping
+│   ├── retrieval.py            # Entity → chunks: title variants, opensearch, redirect, semantic search
 │   └── prompts.py              # System prompt strings used by the LLM-driven nodes
 ├── eval/                       # Evaluation pipeline
 │   ├── dataset.py              # Dataset loading and validation

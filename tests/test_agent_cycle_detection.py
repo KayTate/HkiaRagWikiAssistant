@@ -108,15 +108,15 @@ def test_agent_stops_on_circular_prerequisites(mocker: Any) -> None:
     and causes the agent to finalize with whatever partial chain was built.
     """
     mocker.patch(
-        "agent.nodes.vs_get_page_by_title",
+        "agent.retrieval.vs_get_page_by_title",
         side_effect=_stub_get_page_by_title,
     )
     mocker.patch(
-        "agent.nodes.embed_chunks",
+        "agent.retrieval.embed_chunks",
         side_effect=_stub_embed_chunks,
     )
     mocker.patch(
-        "agent.nodes.vs_semantic_search",
+        "agent.retrieval.vs_semantic_search",
         side_effect=_stub_semantic_search,
     )
 
@@ -137,7 +137,7 @@ def test_agent_stops_on_circular_prerequisites(mocker: Any) -> None:
 
     mocker.patch("agent.nodes._call_llm", side_effect=mock_call_llm)
     mocker.patch("agent.graph.mlflow")
-    mocker.patch("agent.nodes.mlflow")
+    mocker.patch("agent.retrieval.mlflow")
 
     from agent.graph import compile_graph
 
@@ -174,7 +174,7 @@ def test_agent_respects_max_iterations(mocker: Any) -> None:
     """
     mocker.patch("config.settings.settings.agent_max_iterations", 5)
     mocker.patch(
-        "agent.nodes.vs_get_page_by_title",
+        "agent.retrieval.vs_get_page_by_title",
         return_value=[
             {
                 "text": "This quest requires another quest.",
@@ -183,11 +183,11 @@ def test_agent_respects_max_iterations(mocker: Any) -> None:
         ],
     )
     mocker.patch(
-        "agent.nodes.embed_chunks",
+        "agent.retrieval.embed_chunks",
         side_effect=_stub_embed_chunks,
     )
     mocker.patch(
-        "agent.nodes.vs_semantic_search",
+        "agent.retrieval.vs_semantic_search",
         side_effect=_stub_semantic_search,
     )
 
@@ -207,7 +207,7 @@ def test_agent_respects_max_iterations(mocker: Any) -> None:
 
     mocker.patch("agent.nodes._call_llm", side_effect=mock_call_llm)
     mocker.patch("agent.graph.mlflow")
-    mocker.patch("agent.nodes.mlflow")
+    mocker.patch("agent.retrieval.mlflow")
 
     from agent.graph import compile_graph
 
@@ -245,7 +245,7 @@ def test_agent_continues_on_persistent_parse_failure(mocker: Any, caplog: Any) -
 
     mocker.patch("config.settings.settings.agent_max_iterations", 5)
     mocker.patch(
-        "agent.nodes.vs_get_page_by_title",
+        "agent.retrieval.vs_get_page_by_title",
         return_value=[
             {
                 "text": "Quest 0 details here.",
@@ -254,11 +254,11 @@ def test_agent_continues_on_persistent_parse_failure(mocker: Any, caplog: Any) -
         ],
     )
     mocker.patch(
-        "agent.nodes.embed_chunks",
+        "agent.retrieval.embed_chunks",
         side_effect=_stub_embed_chunks,
     )
     mocker.patch(
-        "agent.nodes.vs_semantic_search",
+        "agent.retrieval.vs_semantic_search",
         side_effect=_stub_semantic_search,
     )
 
@@ -278,7 +278,7 @@ def test_agent_continues_on_persistent_parse_failure(mocker: Any, caplog: Any) -
 
     mocker.patch("agent.nodes._call_llm", side_effect=mock_call_llm)
     mocker.patch("agent.graph.mlflow")
-    mocker.patch("agent.nodes.mlflow")
+    mocker.patch("agent.retrieval.mlflow")
 
     from agent.graph import compile_graph
 

@@ -9,7 +9,7 @@ from typing import Any
 import requests
 
 from agent.extraction import _normalize_entity
-from agent.nodes import (
+from agent.retrieval import (
     _extract_redirect_target,
     _fetch_entity_chunks,
     _title_candidates,
@@ -59,12 +59,12 @@ def test_fetch_entity_chunks_resolves_via_suffix(mocker: Any) -> None:
             return target_chunks
         return []
 
-    mocker.patch("agent.nodes.vs_get_page_by_title", side_effect=fake_get_page)
+    mocker.patch("agent.retrieval.vs_get_page_by_title", side_effect=fake_get_page)
     opensearch_mock = mocker.patch(
-        "agent.nodes._resolve_title_via_opensearch", return_value=None
+        "agent.retrieval._resolve_title_via_opensearch", return_value=None
     )
-    embed_mock = mocker.patch("agent.nodes.embed_chunks")
-    search_mock = mocker.patch("agent.nodes.vs_semantic_search")
+    embed_mock = mocker.patch("agent.retrieval.embed_chunks")
+    search_mock = mocker.patch("agent.retrieval.vs_semantic_search")
 
     result = _fetch_entity_chunks("Ice and Glow", "question text")
 
@@ -91,10 +91,10 @@ def test_fetch_entity_chunks_resolves_via_the_prefix(mocker: Any) -> None:
             return target_chunks
         return []
 
-    mocker.patch("agent.nodes.vs_get_page_by_title", side_effect=fake_get_page)
-    mocker.patch("agent.nodes._resolve_title_via_opensearch", return_value=None)
-    mocker.patch("agent.nodes.embed_chunks")
-    mocker.patch("agent.nodes.vs_semantic_search")
+    mocker.patch("agent.retrieval.vs_get_page_by_title", side_effect=fake_get_page)
+    mocker.patch("agent.retrieval._resolve_title_via_opensearch", return_value=None)
+    mocker.patch("agent.retrieval.embed_chunks")
+    mocker.patch("agent.retrieval.vs_semantic_search")
 
     result = _fetch_entity_chunks("Mystery Tree", "How do I unlock The Mystery Tree?")
 
@@ -115,13 +115,13 @@ def test_fetch_entity_chunks_uses_opensearch_when_variants_fail(mocker: Any) -> 
             return opensearch_chunks
         return []
 
-    mocker.patch("agent.nodes.vs_get_page_by_title", side_effect=fake_get_page)
+    mocker.patch("agent.retrieval.vs_get_page_by_title", side_effect=fake_get_page)
     mocker.patch(
-        "agent.nodes._resolve_title_via_opensearch",
+        "agent.retrieval._resolve_title_via_opensearch",
         return_value="Apple Orchard",
     )
-    embed_mock = mocker.patch("agent.nodes.embed_chunks")
-    search_mock = mocker.patch("agent.nodes.vs_semantic_search")
+    embed_mock = mocker.patch("agent.retrieval.embed_chunks")
+    search_mock = mocker.patch("agent.retrieval.vs_semantic_search")
 
     result = _fetch_entity_chunks("apple tree", "where is the apple tree?")
 
@@ -132,11 +132,13 @@ def test_fetch_entity_chunks_uses_opensearch_when_variants_fail(mocker: Any) -> 
 
 def test_fetch_entity_chunks_semantic_search_uses_full_question(mocker: Any) -> None:
     """Semantic fallback must embed the full question, not the bare entity."""
-    mocker.patch("agent.nodes.vs_get_page_by_title", return_value=[])
-    mocker.patch("agent.nodes._resolve_title_via_opensearch", return_value=None)
-    embed_mock = mocker.patch("agent.nodes.embed_chunks", return_value=[[0.1] * 384])
+    mocker.patch("agent.retrieval.vs_get_page_by_title", return_value=[])
+    mocker.patch("agent.retrieval._resolve_title_via_opensearch", return_value=None)
+    embed_mock = mocker.patch(
+        "agent.retrieval.embed_chunks", return_value=[[0.1] * 384]
+    )
     search_mock = mocker.patch(
-        "agent.nodes.vs_semantic_search",
+        "agent.retrieval.vs_semantic_search",
         return_value=[{"text": "fallback", "metadata": {}}],
     )
 
@@ -170,13 +172,13 @@ def test_fetch_entity_chunks_follows_redirect_from_opensearch(mocker: Any) -> No
             return final_chunks
         return []
 
-    mocker.patch("agent.nodes.vs_get_page_by_title", side_effect=fake_get_page)
+    mocker.patch("agent.retrieval.vs_get_page_by_title", side_effect=fake_get_page)
     mocker.patch(
-        "agent.nodes._resolve_title_via_opensearch",
+        "agent.retrieval._resolve_title_via_opensearch",
         return_value="Wooden Block",
     )
-    mocker.patch("agent.nodes.embed_chunks")
-    mocker.patch("agent.nodes.vs_semantic_search")
+    mocker.patch("agent.retrieval.embed_chunks")
+    mocker.patch("agent.retrieval.vs_semantic_search")
 
     result = _fetch_entity_chunks("wood block", "what is a wood block?")
 
@@ -185,14 +187,16 @@ def test_fetch_entity_chunks_follows_redirect_from_opensearch(mocker: Any) -> No
 
 def test_opensearch_failure_does_not_raise(mocker: Any) -> None:
     """Raising from opensearch_title must not propagate; semantic fallback runs."""
-    mocker.patch("agent.nodes.vs_get_page_by_title", return_value=[])
+    mocker.patch("agent.retrieval.vs_get_page_by_title", return_value=[])
     mocker.patch(
         "ingestion.api_client.opensearch_title",
         side_effect=requests.ConnectionError("boom"),
     )
-    embed_mock = mocker.patch("agent.nodes.embed_chunks", return_value=[[0.1] * 384])
+    embed_mock = mocker.patch(
+        "agent.retrieval.embed_chunks", return_value=[[0.1] * 384]
+    )
     search_mock = mocker.patch(
-        "agent.nodes.vs_semantic_search",
+        "agent.retrieval.vs_semantic_search",
         return_value=[{"text": "fallback", "metadata": {}}],
     )
 

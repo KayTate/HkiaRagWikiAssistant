@@ -96,11 +96,13 @@ def retrieval_stream() -> Iterator[tuple[logging.Logger, io.StringIO]]:
 
 def _configure_common_mocks(mocker: Any) -> None:
     mocker.patch(
-        "agent.nodes.vs_get_page_by_title",
+        "agent.retrieval.vs_get_page_by_title",
         side_effect=lambda title: _QUEST_A_CHUNKS if title == "Quest A" else [],
     )
-    mocker.patch("agent.nodes.embed_chunks", side_effect=_stub_embed_chunks)
-    mocker.patch("agent.nodes.vs_semantic_search", side_effect=_stub_semantic_search)
+    mocker.patch("agent.retrieval.embed_chunks", side_effect=_stub_embed_chunks)
+    mocker.patch(
+        "agent.retrieval.vs_semantic_search", side_effect=_stub_semantic_search
+    )
     mocker.patch("agent.graph.mlflow")
 
 
@@ -175,9 +177,7 @@ def test_llm_call_logs_prompt_and_response(
     from agent.graph import compile_graph
 
     graph = compile_graph()
-    graph.invoke(
-        AgentState(question="Tell me about Quest A", current_entity="Quest A")
-    )
+    graph.invoke(AgentState(question="Tell me about Quest A", current_entity="Quest A"))
 
     retrieval_logger, stream = retrieval_stream
     events = _collect_after(retrieval_logger, stream)
@@ -221,9 +221,7 @@ def test_trace_id_threads_across_events(
     from agent.graph import compile_graph
 
     graph = compile_graph()
-    graph.invoke(
-        AgentState(question="Tell me about Quest A", current_entity="Quest A")
-    )
+    graph.invoke(AgentState(question="Tell me about Quest A", current_entity="Quest A"))
 
     retrieval_logger, stream = retrieval_stream
     events = _collect_after(retrieval_logger, stream)
@@ -268,9 +266,7 @@ def test_disabled_flag_suppresses_events(
     from agent.graph import compile_graph
 
     graph = compile_graph()
-    graph.invoke(
-        AgentState(question="Tell me about Quest A", current_entity="Quest A")
-    )
+    graph.invoke(AgentState(question="Tell me about Quest A", current_entity="Quest A"))
 
     retrieval_logger, stream = retrieval_stream
     events = _collect_after(retrieval_logger, stream)
