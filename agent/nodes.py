@@ -571,10 +571,18 @@ def _extract_entity_from_question(question: str) -> str | None:
 def retrieve(state: AgentState) -> AgentState:
     """Fetch chunks for the current entity or run semantic search.
 
-    Increments iteration_count before any retrieval so the limit check
-    in check_complete fires correctly even if retrieval raises. Skips
-    entities already in visited to prevent infinite loops on circular
+    Skips entities already in visited to prevent infinite loops on circular
     prerequisite chains.
+
+    iteration_count is incremented unconditionally at the top of this
+    function — before the visited-skip check — on purpose. The cap is a
+    hard ceiling on graph walks, not a measure of "useful work". When
+    extract repeatedly fails to parse JSON, _handle_parse_failure flips
+    needs_more_retrieval back to True after every retrieve, so the
+    visited-skip path alone cannot break the loop; only the iteration
+    cap can. Counting visited-skips against the cap costs at most a
+    handful of fast iterations in pathological cases, which is the
+    correct tradeoff for guaranteed termination.
 
     Args:
         state: Agent state with current_entity and visited populated.
@@ -583,7 +591,6 @@ def retrieve(state: AgentState) -> AgentState:
         Updated state with new chunks appended to retrieved_context and
         resolved_entities, and current_entity added to visited.
     """
-    # Increment before retrieval so the limit check is accurate.
     state.iteration_count += 1
 
     entity = state.current_entity
@@ -1049,8 +1056,15 @@ def _apply_extract_result(data: dict[str, Any], state: AgentState) -> AgentState
 def _handle_parse_failure(state: AgentState) -> AgentState:
     """Fallback when all JSON parse retries are exhausted.
 
-    Prefer continuing retrieval over returning an incomplete answer. The
-    agent_max_iterations cap (default 10) prevents runaway looping.
+    Prefer continuing retrieval over returning an incomplete answer.
+    Setting needs_more_retrieval=True without changing current_entity
+    means the next retrieve will hit the visited-skip path, which by
+    itself cannot terminate the loop because this function will run
+    again on the next iteration and flip the flag back. Termination
+    relies on retrieve incrementing iteration_count unconditionally
+    (including on visited-skips) so that _route_after_check's
+    iteration-limit branch eventually fires. See the matching note on
+    retrieve and _route_after_check.
 
     Args:
         state: Current agent state.

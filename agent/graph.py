@@ -42,6 +42,14 @@ def _route_after_check(state: AgentState) -> str:
     2. No more retrieval needed → synthesize
     3. More retrieval needed → retrieve
 
+    The iteration-limit branch MUST be checked first. It is the only
+    guaranteed termination path when extract repeatedly fails to parse
+    JSON: _handle_parse_failure flips needs_more_retrieval back to True
+    after every retrieve, so without the iteration cap firing first the
+    graph would loop until LangGraph's internal recursion guard trips.
+    Reordering these branches re-introduces that runaway-loop class of
+    bug — preserve the order when editing.
+
     Args:
         state: Current agent state after check_complete ran.
 
