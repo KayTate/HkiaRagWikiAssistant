@@ -47,7 +47,13 @@ def test_respond_returns_fallback_when_agent_graph_unavailable(
 
     result = respond("What quests unlock Ice and Glow?", [])
     assert isinstance(result, str)
-    assert len(result) > 0
+    # Match a distinctive substring of the production fallback message in
+    # app/gradio_app.py rather than just len > 0, so a regression that
+    # silently returns an exception's str() or some other non-empty
+    # placeholder fails the test instead of slipping through.
+    assert "agent graph is not available" in result, (
+        f"Expected fallback message to mention the missing agent graph; got {result!r}"
+    )
 
 
 def test_history_to_messages_handles_dict_format() -> None:

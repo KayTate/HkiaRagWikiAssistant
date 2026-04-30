@@ -163,12 +163,16 @@ def test_agent_stops_on_circular_prerequisites(mocker: Any) -> None:
 
 
 def test_agent_respects_max_iterations(mocker: Any) -> None:
-    """Agent must stop at exactly agent_max_iterations and invoke handle_limit.
+    """Agent must stop at exactly the configured iteration limit.
 
-    A mock that always returns a new unseen prerequisite would loop forever
-    without the iteration guard. This test verifies the guard fires and
-    handle_iteration_limit populates final_answer.
+    A mock that always returns a new unseen prerequisite would loop
+    forever without the iteration guard. Patches agent_max_iterations
+    to 5 (vs. the production default of 10) so the test proves the
+    guard fires and runs roughly twice as fast — the specific value
+    doesn't matter as long as it is small and the assertion below
+    matches it exactly.
     """
+    mocker.patch("config.settings.settings.agent_max_iterations", 5)
     mocker.patch(
         "agent.nodes.vs_get_page_by_title",
         return_value=[
@@ -206,7 +210,6 @@ def test_agent_respects_max_iterations(mocker: Any) -> None:
     mocker.patch("agent.nodes.mlflow")
 
     from agent.graph import compile_graph
-    from config.settings import settings
 
     graph = compile_graph()
 
@@ -219,9 +222,8 @@ def test_agent_respects_max_iterations(mocker: Any) -> None:
     raw = graph.invoke(initial_state)
     result = AgentState(**raw)
 
-    assert result.iteration_count == settings.agent_max_iterations, (
-        f"Expected iteration_count == {settings.agent_max_iterations}, "
-        f"got {result.iteration_count}"
+    assert result.iteration_count == 5, (
+        f"Expected iteration_count == 5 (patched cap), got {result.iteration_count}"
     )
     assert result.final_answer != "", (
         "handle_iteration_limit must populate final_answer"
@@ -233,11 +235,15 @@ def test_agent_continues_on_persistent_parse_failure(mocker: Any, caplog: Any) -
 
     On persistent JSON decode failure, extract_info falls back to
     needs_more_retrieval=True instead of silently marking the question
-    complete. The loop continues until agent_max_iterations, at which
-    point handle_iteration_limit produces a partial answer.
+    complete. The loop continues until the iteration cap fires, at
+    which point handle_iteration_limit produces a partial answer.
+    Patches agent_max_iterations to 5 to keep the test fast and to
+    let the assertions below check exact counts (5 iterations × 3
+    parse attempts = 15 extract calls).
     """
     import logging
 
+    mocker.patch("config.settings.settings.agent_max_iterations", 5)
     mocker.patch(
         "agent.nodes.vs_get_page_by_title",
         return_value=[
@@ -275,7 +281,6 @@ def test_agent_continues_on_persistent_parse_failure(mocker: Any, caplog: Any) -
     mocker.patch("agent.nodes.mlflow")
 
     from agent.graph import compile_graph
-    from config.settings import settings
 
     graph = compile_graph()
 
@@ -288,16 +293,16 @@ def test_agent_continues_on_persistent_parse_failure(mocker: Any, caplog: Any) -
         raw = graph.invoke(initial_state)
     result = AgentState(**raw)
 
-    assert result.iteration_count == settings.agent_max_iterations, (
-        f"Expected iteration_count == {settings.agent_max_iterations}, "
-        f"got {result.iteration_count}"
+    assert result.iteration_count == 5, (
+        f"Expected iteration_count == 5 (patched cap), got {result.iteration_count}"
     )
     assert result.final_answer != "", (
         "Partial answer must be produced when retries are exhausted"
     )
-    # 10 iterations × 3 attempts per iteration = 30 max extract calls
-    assert extract_call_count[0] <= settings.agent_max_iterations * 3, (
-        f"Extract should be capped at max_iterations*3, got {extract_call_count[0]}"
+    # 5 iterations × 3 parse-retry attempts per iteration = 15 max extract calls
+    assert extract_call_count[0] <= 5 * 3, (
+        f"Extract should be capped at max_iterations*3 (15), "
+        f"got {extract_call_count[0]}"
     )
     assert any(record.levelno == logging.ERROR for record in caplog.records), (
         "At least one error-level log must be emitted when parse retries exhaust"
