@@ -141,14 +141,7 @@ def _mark_changed_pages_pending(
         title = str(page["title"])
         revision_id = int(page["revision_id"])
         existing = state_db.get_page(title)
-        if existing is None:
-            state_db.upsert_page(
-                page_title=title,
-                revision_id=revision_id,
-                status="pending",
-                embedding_model=current_model,
-            )
-        elif existing["revision_id"] != revision_id:
+        if existing is None or existing["revision_id"] != revision_id:
             state_db.upsert_page(
                 page_title=title,
                 revision_id=revision_id,
@@ -180,16 +173,12 @@ def _process_pending_pages() -> None:
             title = page["page_title"]
             wikitext = wikitext_map.get(title)
             if wikitext is None:
-                logger.warning(
-                    "No wikitext returned for '%s', skipping", title
-                )
+                logger.warning("No wikitext returned for '%s', skipping", title)
                 continue
             _ingest_page(title, page["revision_id"], wikitext)
 
 
-def _ingest_page(
-    page_title: str, revision_id: int, wikitext: str
-) -> None:
+def _ingest_page(page_title: str, revision_id: int, wikitext: str) -> None:
     """Execute the full ingestion sequence for a single wiki page.
 
     Status transitions: pending → in_progress → complete on success.

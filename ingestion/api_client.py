@@ -124,9 +124,14 @@ def get_all_page_titles() -> list[str]:
         pages = data.get("query", {}).get("allpages", [])
         titles.extend(page["title"] for page in pages)
 
-        if "continue" not in data:
+        # Read the continuation token defensively. MediaWiki may return a
+        # 'continue' block without 'apcontinue' when generators are
+        # combined with other modules; treat a missing token as "no more
+        # pages" rather than KeyError-ing mid-pagination.
+        next_token = data.get("continue", {}).get("apcontinue")
+        if next_token is None:
             break
-        params["apcontinue"] = data["continue"]["apcontinue"]
+        params["apcontinue"] = next_token
 
     logger.info("Fetched %d page titles from wiki", len(titles))
     return titles
@@ -200,9 +205,11 @@ def get_all_pages_with_revision_ids() -> list[dict[str, str | int]]:
                     }
                 )
 
-        if "continue" not in data:
+        # Defensive read — see get_all_page_titles above for rationale.
+        next_token = data.get("continue", {}).get("gapcontinue")
+        if next_token is None:
             break
-        params["gapcontinue"] = data["continue"]["gapcontinue"]
+        params["gapcontinue"] = next_token
 
     logger.info("Fetched %d pages with revision IDs from wiki", len(results))
     return results
