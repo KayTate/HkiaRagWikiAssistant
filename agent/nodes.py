@@ -182,7 +182,7 @@ def _call_llm(system_prompt: str, user_message: str, json_mode: bool = False) ->
 
 
 def _call_ollama(system_prompt: str, user_message: str) -> str:
-    """Call the local Ollama chat API.
+    """Call the local Ollama chat API with automatic retry on transient errors.
 
     Args:
         system_prompt: Instruction context.
@@ -192,7 +192,36 @@ def _call_ollama(system_prompt: str, user_message: str) -> str:
         The model's reply text.
 
     Raises:
-        RuntimeError: On HTTP error or unexpected response shape.
+        requests.RequestException: On network/HTTP failure after retries
+            are exhausted.
+        RuntimeError: On unexpected response shape.
+    """
+    return _call_ollama_with_retry(system_prompt, user_message)
+
+
+@retry(
+    retry=retry_if_exception_type(requests.RequestException),
+    wait=wait_exponential(multiplier=1, min=1, max=10),
+    stop=stop_after_attempt(3),
+    reraise=True,
+)
+def _call_ollama_with_retry(system_prompt: str, user_message: str) -> str:
+    """Send a chat request to Ollama with retry on connection/timeout errors.
+
+    Uses a tighter backoff than the cloud providers because Ollama runs
+    locally — long waits don't help recover a hung or absent server, and
+    fast feedback is preferable.
+
+    Args:
+        system_prompt: Instruction context.
+        user_message: User turn content.
+
+    Returns:
+        The model's reply text.
+
+    Raises:
+        requests.RequestException: On network failure after retries exhausted.
+        RuntimeError: On unexpected response shape.
     """
     url = "http://localhost:11434/api/chat"
     payload: dict[str, Any] = {
@@ -213,12 +242,9 @@ def _call_ollama(system_prompt: str, user_message: str) -> str:
             f"Ollama response missing expected fields for model "
             f"'{settings.llm_model}': {exc}"
         ) from exc
-    except requests.HTTPError as exc:
-        raise RuntimeError(
-            f"Ollama HTTP error {exc.response.status_code} calling '{url}': {exc}"
-        ) from exc
     except requests.RequestException as exc:
-        raise RuntimeError(f"Ollama request failed calling '{url}': {exc}") from exc
+        logger.warning("Ollama request failed, will retry: %s", exc)
+        raise
 
 
 def _call_openai(system_prompt: str, user_message: str, json_mode: bool = False) -> str:
@@ -306,7 +332,7 @@ def _call_openai_with_retry(
 
 
 def _call_anthropic(system_prompt: str, user_message: str) -> str:
-    """Call the Anthropic Messages API.
+    """Call the Anthropic Messages API with automatic retry on rate limits.
 
     Args:
         system_prompt: Instruction context.
@@ -316,12 +342,40 @@ def _call_anthropic(system_prompt: str, user_message: str) -> str:
         The model's reply text.
 
     Raises:
-        RuntimeError: On HTTP error, missing API key, or unexpected response.
+        RuntimeError: On missing API key, unexpected response, or non-HTTP
+            network failure.
+        requests.HTTPError: On HTTP error after retries are exhausted.
     """
     if not settings.anthropic_api_key:
         raise RuntimeError(
             "ANTHROPIC_API_KEY is not configured but llm_provider is 'anthropic'."
         )
+    return _call_anthropic_with_retry(system_prompt, user_message)
+
+
+@retry(
+    retry=retry_if_exception_type(requests.HTTPError),
+    wait=wait_exponential(multiplier=2, min=2, max=60),
+    stop=stop_after_attempt(5),
+    reraise=True,
+)
+def _call_anthropic_with_retry(system_prompt: str, user_message: str) -> str:
+    """Send a chat request to Anthropic with retry on 429 / transient HTTP errors.
+
+    Mirrors the OpenAI retry shape (5 attempts, 2-60s exponential backoff)
+    so all cloud LLM providers behave consistently under rate-limit pressure.
+
+    Args:
+        system_prompt: Instruction context.
+        user_message: User turn content.
+
+    Returns:
+        The model's reply text.
+
+    Raises:
+        requests.HTTPError: On rate limit / HTTP error after retries exhausted.
+        RuntimeError: On unexpected response shape.
+    """
     url = "https://api.anthropic.com/v1/messages"
     payload: dict[str, Any] = {
         "model": settings.llm_model,
@@ -340,6 +394,9 @@ def _call_anthropic(system_prompt: str, user_message: str) -> str:
             json=payload,
             timeout=120,
         )
+        if response.status_code == 429:
+            logger.warning("Anthropic rate limit hit, will retry with backoff")
+            response.raise_for_status()
         response.raise_for_status()
         data: dict[str, Any] = response.json()
         return str(data["content"][0]["text"])
@@ -348,10 +405,8 @@ def _call_anthropic(system_prompt: str, user_message: str) -> str:
             f"Anthropic response missing expected fields for model "
             f"'{settings.llm_model}': {exc}"
         ) from exc
-    except requests.HTTPError as exc:
-        raise RuntimeError(
-            f"Anthropic HTTP error {exc.response.status_code} calling '{url}': {exc}"
-        ) from exc
+    except requests.HTTPError:
+        raise
     except requests.RequestException as exc:
         raise RuntimeError(f"Anthropic request failed calling '{url}': {exc}") from exc
 
@@ -903,6 +958,18 @@ def _extract_with_retry(
     subsequent attempts include the previous malformed response and an
     explicit nudge to return strict JSON. Capped at max_attempts total
     LLM calls.
+
+    Cost note: this retry budget compounds with agent_max_iterations —
+    in the worst case (every extract call returns malformed JSON for
+    every iteration) the agent makes max_attempts * agent_max_iterations
+    extract calls per question, plus the synthesize call. With the
+    defaults of 3 and 10 that is up to 30 extract calls. This is an
+    intentional tradeoff: we prefer to keep retrying and produce a
+    correct, grounded answer over short-circuiting to save tokens. If
+    cost becomes a concern, lower max_attempts here before lowering
+    agent_max_iterations — losing iterations sacrifices multi-hop
+    reasoning, while losing JSON-retry attempts only hurts robustness
+    against a flaky LLM.
 
     Args:
         user_message: The initial user content for the extract prompt.

@@ -55,6 +55,14 @@ def _get_with_retry(
         WikiAPIError: If the request fails after all retry attempts.
     """
 
+    # Generous retry budget on purpose: this function is the workhorse
+    # of the ingestion pipeline, where a long-running batch job over
+    # thousands of pages should tolerate transient wiki flakes rather
+    # than abort and lose progress. Worst-case wait per call is roughly
+    # 5 + 10 + 20 + 40 + 60 + 60 = 195 seconds of backoff across 7
+    # attempts. That is intentional for ingestion but would be far too
+    # patient for the agent's read path — opensearch_title below uses a
+    # much tighter budget for that reason.
     @retry(
         retry=retry_if_exception_type((requests.HTTPError, requests.ReadTimeout)),
         wait=wait_exponential(multiplier=2, min=5, max=120),
@@ -259,10 +267,17 @@ def opensearch_title(query: str, limit: int = 3) -> str | None:
         and must not raise into the agent's retrieval path.
     """
 
+    # Tight retry budget on purpose: opensearch is a best-effort fallback
+    # called from the agent's hot path. A single user question must not
+    # stall for minutes waiting on a flapping API — we'd rather fall
+    # through to semantic search quickly. Worst-case wait here is roughly
+    # 2 + 4 = 6 seconds of backoff plus request timeouts. The ingestion
+    # path uses _get_with_retry above, which is tuned much more
+    # generously because batch jobs can afford to wait.
     @retry(
         retry=retry_if_exception_type((requests.HTTPError, requests.ReadTimeout)),
-        wait=wait_exponential(multiplier=2, min=5, max=120),
-        stop=stop_after_attempt(7),
+        wait=wait_exponential(multiplier=1, min=2, max=15),
+        stop=stop_after_attempt(3),
         reraise=True,
     )
     def _do_request() -> list:  # type: ignore[type-arg]
