@@ -130,8 +130,11 @@ Prerequisites:
 - Ingestion has completed at least once (`python sync.py --mode status`) —
   the agent retrieves from ChromaDB, so an empty collection produces
   meaningless scores.
-- `OPENAI_API_KEY` is set — the LLM judges use `openai:/gpt-4o-mini`
-  regardless of which provider the agent itself is configured for.
+- `OPENAI_API_KEY` is available — the LLM judges use
+  `openai:/gpt-4o-mini` regardless of which provider the agent itself
+  is configured for. Either set it in your shell or in `.env`; the
+  runner copies the `.env` value into the process environment so
+  MLflow's OpenAI SDK calls authenticate correctly.
 
 Inspect runs in the MLflow UI (see above).
 

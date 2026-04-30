@@ -11,7 +11,7 @@ class Settings(BaseSettings):
 
     # ChromaDB
     chroma_persist_dir: str = "./chroma_data"
-    chroma_collection_name: str = "hkia_nomic-embed-text_recursive_v1"
+    chroma_collection_name: str = "hkia_nomic-embed-text_recursive_v2"
 
     # Embedding
     embedding_provider: Literal["ollama", "openai"] = "ollama"

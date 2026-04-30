@@ -17,6 +17,7 @@ import pandas as pd
 
 from agent.graph import compile_graph
 from agent.state import AgentState
+from config.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -83,14 +84,18 @@ def _build_predict_fn() -> Any:
     MLflow LangChain autolog is enabled inside ``compile_graph()``,
     so traces are produced automatically for each invocation.
 
+    The returned function takes the question as a keyword argument
+    matching the ``inputs`` dict keys in the dataset, because
+    ``mlflow.genai.evaluate`` calls predict_fn with ``**inputs``.
+
     Returns:
-        A callable ``(inputs) -> str`` suitable for evaluate().
+        A callable ``(question: str) -> str`` suitable for evaluate().
     """
     graph = compile_graph()
 
-    def predict_fn(inputs: dict[str, str]) -> str:
+    def predict_fn(question: str) -> str:
         """Invoke the agent and return the final answer."""
-        raw = graph.invoke({"question": inputs["question"]})
+        raw = graph.invoke({"question": question})
         state = AgentState(**raw)
         return state.final_answer
 
@@ -174,6 +179,32 @@ def _log_per_question_type_metrics(
             )
 
 
+def _ensure_openai_key_in_environ() -> None:
+    """Bridge settings.openai_api_key into os.environ for MLflow's LLM judges.
+
+    The judges call the OpenAI SDK directly, which only reads
+    ``os.environ["OPENAI_API_KEY"]`` — it does not consult pydantic
+    settings or .env files. So even when the key is set in .env, the
+    judges fail to authenticate unless we copy it into the process
+    environment first.
+
+    Raises:
+        RuntimeError: If neither os.environ nor settings has a non-empty
+            OPENAI_API_KEY. The judges cannot run without one.
+    """
+    if os.environ.get("OPENAI_API_KEY"):
+        return
+    if settings.openai_api_key:
+        os.environ["OPENAI_API_KEY"] = settings.openai_api_key
+        return
+    raise RuntimeError(
+        "OPENAI_API_KEY is not set in the environment or in .env. "
+        "The MLflow LLM judges require an OpenAI key even when the "
+        "agent runs on a different provider. Set OPENAI_API_KEY in "
+        "your shell or in .env and try again."
+    )
+
+
 def run_experiment(
     experiment_name: str,
     run_name: str,
@@ -195,6 +226,7 @@ def run_experiment(
     Returns:
         The completed mlflow.entities.Run object.
     """
+    _ensure_openai_key_in_environ()
     mlflow.set_experiment(experiment_name)
 
     dataset = _load_and_transform_dataset(dataset_path)

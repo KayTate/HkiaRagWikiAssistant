@@ -81,7 +81,7 @@ def _patch_runner_externals(mocker: Any, dataset_size: int) -> None:
     """
     mocker.patch(
         "eval.runner._build_predict_fn",
-        return_value=lambda inputs: f"stub: {inputs['question']}",
+        return_value=lambda question: f"stub: {question}",
     )
     mocker.patch("eval.runner._build_scorers", return_value=[])
     mocker.patch(
