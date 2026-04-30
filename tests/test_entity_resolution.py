@@ -8,10 +8,10 @@ from typing import Any
 
 import requests
 
+from agent.extraction import _normalize_entity
 from agent.nodes import (
     _extract_redirect_target,
     _fetch_entity_chunks,
-    _normalize_entity,
     _title_candidates,
 )
 
