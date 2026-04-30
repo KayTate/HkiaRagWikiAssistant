@@ -8,6 +8,7 @@ for agent observability.
 """
 
 import logging
+import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
@@ -28,7 +29,7 @@ _retrieval_configured = False
 def setup_logging(
     log_file: Path | str = _DEFAULT_LOG_FILE,
     level: int = logging.INFO,
-    also_stderr: bool = True,
+    also_stdout: bool = True,
     max_bytes: int = _DEFAULT_MAX_BYTES,
     backup_count: int = _DEFAULT_BACKUP_COUNT,
 ) -> None:
@@ -42,7 +43,7 @@ def setup_logging(
         log_file: Destination log file. Parent directory is created if
             it doesn't exist.
         level: Minimum record level the root logger will emit.
-        also_stderr: If True, also attach a StreamHandler to stderr
+        also_stdout: If True, also attach a StreamHandler to stdout
             using the same formatter.
         max_bytes: Size threshold in bytes that triggers rotation.
         backup_count: Number of rotated files to retain.
@@ -68,8 +69,8 @@ def setup_logging(
     root.setLevel(level)
     root.addHandler(file_handler)
 
-    if also_stderr:
-        stream_handler = logging.StreamHandler()
+    if also_stdout:
+        stream_handler = logging.StreamHandler(sys.stdout)
         stream_handler.setFormatter(formatter)
         root.addHandler(stream_handler)
 
