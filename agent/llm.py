@@ -26,29 +26,10 @@ from tenacity import (
     wait_exponential,
 )
 
+from common.http import is_transient_http_error
 from config.settings import settings
 
 logger = logging.getLogger(__name__)
-
-# Status codes that warrant a retry. 429 is rate-limiting; 5xx are
-# server-side transient errors. Auth/permission/not-found errors (401,
-# 403, 404) are excluded on purpose — they will not resolve themselves
-# during the backoff window and would just burn the retry budget.
-_TRANSIENT_STATUS_CODES = {429, 500, 502, 503, 504}
-
-
-def _is_transient_http_error(exc: BaseException) -> bool:
-    """Tenacity retry predicate: True only for transient HTTP responses.
-
-    Replaces the previous ``retry_if_exception_type(requests.HTTPError)``
-    which retried every HTTP error indiscriminately, including
-    permanent failures like 401 Unauthorized. Those would burn five
-    attempts × up to 60s of exponential backoff before re-raising the
-    same error, with no chance of recovery.
-    """
-    if isinstance(exc, requests.HTTPError) and exc.response is not None:
-        return exc.response.status_code in _TRANSIENT_STATUS_CODES
-    return False
 
 
 def _call_llm(system_prompt: str, user_message: str, json_mode: bool = False) -> str:
@@ -184,7 +165,7 @@ def _call_openai(system_prompt: str, user_message: str, json_mode: bool = False)
 
 
 @retry(
-    retry=retry_if_exception(_is_transient_http_error),
+    retry=retry_if_exception(is_transient_http_error),
     wait=wait_exponential(multiplier=2, min=2, max=60),
     stop=stop_after_attempt(5),
     reraise=True,
@@ -272,7 +253,7 @@ def _call_anthropic(system_prompt: str, user_message: str) -> str:
 
 
 @retry(
-    retry=retry_if_exception(_is_transient_http_error),
+    retry=retry_if_exception(is_transient_http_error),
     wait=wait_exponential(multiplier=2, min=2, max=60),
     stop=stop_after_attempt(5),
     reraise=True,

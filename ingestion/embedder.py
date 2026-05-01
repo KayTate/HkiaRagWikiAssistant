@@ -15,26 +15,10 @@ from tenacity import (
     wait_exponential,
 )
 
+from common.http import is_transient_http_error
 from config.settings import settings
 
 logger = logging.getLogger(__name__)
-
-# Mirrors agent.llm and ingestion.api_client. Duplicated locally to
-# keep this module decoupled from its siblings; a follow-up refactor
-# can pull these into a shared HTTP helper.
-_TRANSIENT_STATUS_CODES = {429, 500, 502, 503, 504}
-
-
-def _is_transient_http_error(exc: BaseException) -> bool:
-    """Tenacity retry predicate: True only for transient HTTP responses.
-
-    Replaces the previous ``retry_if_exception_type(requests.HTTPError)``
-    which retried any HTTP error — including 401/403/404 — through five
-    attempts of exponential backoff before giving up.
-    """
-    if isinstance(exc, requests.HTTPError) and exc.response is not None:
-        return exc.response.status_code in _TRANSIENT_STATUS_CODES
-    return False
 
 
 class EmbeddingError(RuntimeError):
@@ -160,7 +144,7 @@ def openai_embed(chunks: list[str]) -> list[list[float]]:
 
 
 @retry(
-    retry=retry_if_exception(_is_transient_http_error),
+    retry=retry_if_exception(is_transient_http_error),
     wait=wait_exponential(multiplier=2, min=2, max=60),
     stop=stop_after_attempt(5),
     reraise=True,

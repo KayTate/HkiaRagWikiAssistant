@@ -3,6 +3,11 @@
 Covers the change from ``retry_if_exception_type(requests.HTTPError)`` —
 which retried any HTTP error indiscriminately — to a status-code filter
 that skips the backoff budget for non-transient codes (401/403/404).
+The predicates were originally duplicated across three modules; they
+now live in ``common.http`` and the predicate-contract tests assert
+against the canonical functions there. The end-to-end behavior tests
+(further down) still exercise each call site so they catch a wiring
+regression even though there is only one predicate to break.
 """
 
 from typing import Any
@@ -11,9 +16,7 @@ from unittest.mock import Mock
 import pytest
 import requests
 
-from agent.llm import _is_transient_http_error as agent_predicate
-from ingestion.api_client import _should_retry_request as api_client_predicate
-from ingestion.embedder import _is_transient_http_error as embedder_predicate
+from common.http import is_transient_http_error, should_retry_request
 
 
 class _FakeResponse:
@@ -26,7 +29,7 @@ class _FakeResponse:
 def _make_http_error(status_code: int) -> requests.HTTPError:
     """Build an HTTPError carrying a response with the given status code."""
     err = requests.HTTPError(f"HTTP {status_code}")
-    err.response = _FakeResponse(status_code)  # type: ignore[assignment]
+    err.response = _FakeResponse(status_code)
     return err
 
 
@@ -60,11 +63,13 @@ def test_predicate_retries_transient_status_codes(status_code: int) -> None:
     Parametrised so a regression that drops one of these codes from the
     transient set fails for that code specifically, instead of the whole
     test going green because the most common one (429) still works.
+    Both predicates must agree on transient-status responses;
+    ``should_retry_request`` is a strict superset of
+    ``is_transient_http_error`` and must not subtract any code.
     """
     err = _make_http_error(status_code)
-    assert agent_predicate(err) is True
-    assert embedder_predicate(err) is True
-    assert api_client_predicate(err) is True
+    assert is_transient_http_error(err) is True
+    assert should_retry_request(err) is True
 
 
 @pytest.mark.parametrize("status_code", [400, 401, 403, 404, 422])
@@ -76,16 +81,14 @@ def test_predicate_skips_non_transient_4xx(status_code: int) -> None:
     burned five attempts of exponential backoff before giving up.
     """
     err = _make_http_error(status_code)
-    assert agent_predicate(err) is False
-    assert embedder_predicate(err) is False
-    assert api_client_predicate(err) is False
+    assert is_transient_http_error(err) is False
+    assert should_retry_request(err) is False
 
 
 def test_predicate_skips_non_http_exceptions() -> None:
     """Generic exceptions must not match the predicate."""
-    assert agent_predicate(ValueError("boom")) is False
-    assert embedder_predicate(ValueError("boom")) is False
-    assert api_client_predicate(ValueError("boom")) is False
+    assert is_transient_http_error(ValueError("boom")) is False
+    assert should_retry_request(ValueError("boom")) is False
 
 
 def test_predicate_skips_http_error_without_response() -> None:
@@ -96,23 +99,22 @@ def test_predicate_skips_http_error_without_response() -> None:
     not crash on this and must not retry.
     """
     err = requests.HTTPError("no response attached")
-    assert agent_predicate(err) is False
-    assert embedder_predicate(err) is False
-    assert api_client_predicate(err) is False
+    assert is_transient_http_error(err) is False
+    assert should_retry_request(err) is False
 
 
-def test_api_client_predicate_retries_read_timeout() -> None:
-    """The api_client predicate combines the status filter with ReadTimeout.
+def test_should_retry_request_extends_with_read_timeout() -> None:
+    """The combined predicate adds ReadTimeout to the status filter.
 
     Wiki batch fetches pull large payloads; a ReadTimeout on those is
-    almost always transient and worth retrying. The agent and embedder
-    predicates do NOT include ReadTimeout — their retry decorators were
-    not configured to handle it before this change and we kept that
-    contract to avoid widening behavior in this commit.
+    almost always transient and worth retrying. The base predicate
+    ``is_transient_http_error`` does NOT include ReadTimeout — the
+    cloud LLM and embedding clients use it directly because their
+    decorators were not configured to handle ReadTimeout before the
+    dedup that introduced ``common.http`` and we kept that contract.
     """
-    assert api_client_predicate(requests.ReadTimeout()) is True
-    assert agent_predicate(requests.ReadTimeout()) is False
-    assert embedder_predicate(requests.ReadTimeout()) is False
+    assert should_retry_request(requests.ReadTimeout()) is True
+    assert is_transient_http_error(requests.ReadTimeout()) is False
 
 
 # ---------------------------------------------------------------------------
@@ -235,7 +237,7 @@ def test_anthropic_call_retries_on_429_until_success(mocker: Any) -> None:
 
 
 # ---------------------------------------------------------------------------
-# api_client — locks in the wiring of _should_retry_request into the
+# api_client — locks in the wiring of should_retry_request into the
 # tenacity decorator. The predicate-only tests above don't catch a
 # regression where someone reverts the decorator argument.
 # ---------------------------------------------------------------------------
@@ -282,11 +284,11 @@ def test_api_client_retries_on_429_until_success(mocker: Any) -> None:
 def test_api_client_retries_on_read_timeout(mocker: Any) -> None:
     """ReadTimeout must trigger a retry — distinct from the status-code path.
 
-    The combined predicate _should_retry_request adds ReadTimeout to
-    the transient-status filter. Without that branch, every wiki batch
-    that hit a slow response would surface as a hard failure on the
-    first try. This test fails if someone simplifies the predicate to
-    just _is_transient_http_error.
+    The combined predicate ``should_retry_request`` adds ReadTimeout
+    to the transient-status filter. Without that branch, every wiki
+    batch that hit a slow response would surface as a hard failure on
+    the first try. This test fails if someone wires the decorator to
+    ``is_transient_http_error`` instead of ``should_retry_request``.
     """
     mocker.patch("time.sleep")
     get_mock = mocker.patch(

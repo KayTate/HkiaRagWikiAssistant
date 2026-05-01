@@ -10,9 +10,11 @@ Stateful extraction orchestration (the JSON-parse retry loop, the
 state-mutating apply/handle helpers) lives in ``agent.nodes`` because
 it depends on AgentState and the node-level observability wrappers.
 
-Constants and functions keep their leading-underscore prefix because
-they are package-internal — consumed only by ``agent.nodes`` and not
-part of any public API.
+Entity-extraction helpers (``_normalize_entity``,
+``_extract_entity_from_question``) keep their leading-underscore
+prefix — they are package-internal, consumed only by ``agent.nodes``.
+``strip_markdown_fences`` drops the prefix because ``eval.generate``
+also imports it: it is the project's canonical implementation.
 """
 
 import re
@@ -89,11 +91,15 @@ def _extract_entity_from_question(question: str) -> str | None:
     return None
 
 
-def _strip_markdown_fences(text: str) -> str:
+def strip_markdown_fences(text: str) -> str:
     """Remove markdown code fences from an LLM response.
 
     LLMs often wrap JSON output in ```json ... ``` fences despite being
     told not to. This strips them so json.loads can parse the content.
+    Handles arbitrary language tags (```json, ```python, etc.) by
+    discarding everything up to the first newline after the opening
+    fence — a stricter regex like ``^```(?:json)?`` would leave the
+    payload prefixed with the unrecognised language label.
 
     Args:
         text: Raw LLM response that may contain markdown fences.

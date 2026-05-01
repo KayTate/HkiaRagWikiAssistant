@@ -6,8 +6,8 @@ formats them for inclusion in the golden eval dataset.
 
 import json
 import logging
-import re
 
+from agent.extraction import strip_markdown_fences
 from config.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -77,21 +77,6 @@ def _resolve_pair_count(chunk_text: str, n_pairs: int | None) -> int:
     return DEFAULT_PAIR_COUNT
 
 
-def _strip_markdown_fences(text: str) -> str:
-    """Remove leading/trailing markdown code fences if present.
-
-    The LLM sometimes wraps JSON in ```json ... ``` despite instructions
-    not to. This strips those fences before attempting JSON parsing.
-
-    Args:
-        text: Raw LLM output.
-
-    Returns:
-        The text with markdown code fences removed.
-    """
-    return re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip(), flags=re.DOTALL)
-
-
 def _validate_pairs(
     raw_pairs: object, chunk: dict[str, object]
 ) -> list[dict[str, object]]:
@@ -154,7 +139,7 @@ def _call_llm(prompt_user: str) -> str:
         )
 
     try:
-        import ollama  # type: ignore[import-not-found]  # ollama may not be installed
+        import ollama
     except ImportError as err:
         raise RuntimeError(
             "ollama package is required for synthetic generation. "
@@ -209,7 +194,7 @@ def generate_for_chunk(
         logger.exception("LLM call failed for chunk; returning empty list")
         return []
 
-    cleaned = _strip_markdown_fences(raw_response)
+    cleaned = strip_markdown_fences(raw_response)
 
     try:
         parsed = json.loads(cleaned)

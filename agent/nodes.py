@@ -14,7 +14,7 @@ from typing import Any
 
 from agent.extraction import (
     _extract_entity_from_question,
-    _strip_markdown_fences,
+    strip_markdown_fences,
 )
 from agent.llm import _call_llm
 from agent.prompts import (
@@ -344,7 +344,7 @@ def _extract_with_retry(
             node="extract_info",
             state=state,
         )
-        cleaned = _strip_markdown_fences(response_text)
+        cleaned = strip_markdown_fences(response_text)
         try:
             data: dict[str, Any] = json.loads(cleaned)
             return data
