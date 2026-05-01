@@ -145,7 +145,21 @@ def upsert_chunks(
         chunks: List of text chunks to store.
         embeddings: Pre-computed embedding vectors, one per chunk.
         metadatas: ChunkMetadata instances, one per chunk.
+
+    Raises:
+        ValueError: If chunks, embeddings, and metadatas have different
+            lengths. ChromaDB would otherwise raise a less helpful
+            error mid-write, leaving the collection in an
+            indeterminate state. Failing fast at the boundary protects
+            the invariant that every chunk has exactly one embedding
+            and one metadata record.
     """
+    if not (len(chunks) == len(embeddings) == len(metadatas)):
+        raise ValueError(
+            f"upsert_chunks length mismatch for page '{page_title}': "
+            f"{len(chunks)} chunks, {len(embeddings)} embeddings, "
+            f"{len(metadatas)} metadatas. All three must agree."
+        )
     collection = get_or_create_collection(settings.chroma_collection_name)
     ids = [f"{page_title}::{meta.chunk_index}" for meta in metadatas]
     meta_dicts = [meta.model_dump() for meta in metadatas]
@@ -241,5 +255,10 @@ def get_page_by_title(page_title: str) -> list[dict[str, Any]]:
         {"text": doc, "metadata": meta}
         for doc, meta in zip(documents, metadatas_raw, strict=True)
     ]
-    pairs.sort(key=lambda p: p["metadata"].get("chunk_index", 0))
+    # ChromaDB returns metadata as ``Any`` and may yield ``None`` for
+    # rows ingested before metadata was schema-enforced. Coerce to
+    # empty dict at the boundary so the sort key never AttributeErrors
+    # on bad data — a single legacy row should not crash the whole
+    # page-load path.
+    pairs.sort(key=lambda p: (p["metadata"] or {}).get("chunk_index", 0))
     return pairs

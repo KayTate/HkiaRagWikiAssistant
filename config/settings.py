@@ -1,5 +1,6 @@
 from typing import Literal
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings
 
 
@@ -17,13 +18,17 @@ class Settings(BaseSettings):
     embedding_provider: Literal["ollama", "openai"] = "ollama"
     embedding_model: str = "nomic-embed-text"
     embedding_model_version: str = "v1.5"
-    openai_api_key: str = ""
+    # API keys are SecretStr so a stray ``repr(settings)`` in a log
+    # never reveals the value. Read-paths must call
+    # ``.get_secret_value()`` to extract the raw string for headers and
+    # env-var assignments.
+    openai_api_key: SecretStr = SecretStr("")
     openai_embedding_batch_size: int = 100
 
     # LLM
     llm_provider: Literal["ollama", "openai", "anthropic"] = "openai"
     llm_model: str = "gpt-4o-mini"
-    anthropic_api_key: str = ""
+    anthropic_api_key: SecretStr = SecretStr("")
     # Ollama runs locally; the default suits small/medium models and bounds
     # worst-case stall time when a process hangs. Bump for large local
     # models (e.g. 70B) where a single completion can legitimately exceed

@@ -169,7 +169,7 @@ def _embed_batch_openai(batch: list[str]) -> list[list[float]]:
         response = requests.post(
             "https://api.openai.com/v1/embeddings",
             headers={
-                "Authorization": f"Bearer {settings.openai_api_key}",
+                "Authorization": f"Bearer {settings.openai_api_key.get_secret_value()}",
                 "Content-Type": "application/json",
             },
             json={"input": batch, "model": settings.embedding_model},

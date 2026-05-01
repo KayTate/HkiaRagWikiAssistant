@@ -217,9 +217,13 @@ def test_rerun_after_failure_produces_no_duplicates(mocker: Any) -> None:
 
         chunks_after_first_run = dict(fake_collection._stored)
 
+        # Use a side_effect that produces one embedding per input chunk.
+        # The previous return_value=[[0.1]*4, [0.2]*4] returned two
+        # embeddings regardless of input length, which trips the
+        # length-parity guard in upsert_chunks for the 1-chunk Zeta_Page.
         mocker.patch(
             "ingestion.embedder.embed_chunks",
-            return_value=[[0.1] * 4, [0.2] * 4],
+            side_effect=lambda chunks: [[0.1] * 4 for _ in chunks],
         )
 
         from ingestion import state_db
@@ -346,7 +350,7 @@ def test_status_transitions_correctly(mocker: Any) -> None:
         )
         embed_spy = mocker.patch(
             "ingestion.embedder.embed_chunks",
-            return_value=[[0.1] * 4],
+            side_effect=lambda chunks: [[0.1] * 4 for _ in chunks],
         )
 
         from ingestion import state_db

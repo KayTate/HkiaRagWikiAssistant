@@ -33,8 +33,16 @@ def _expand_templates(parsed: Wikicode) -> None:
         if replacement is not None:
             try:
                 parsed.replace(template, replacement)
-            except ValueError:
-                pass
+            except ValueError as exc:
+                # mwparserfromhell raises ValueError when the template
+                # was already replaced by an outer-template pass — this
+                # is expected and benign. Logging at DEBUG (not WARN)
+                # keeps the signal out of normal logs while still
+                # giving an operator a way to surface it during
+                # template-debugging sessions.
+                logger.debug(
+                    "Template '%s' already replaced; skipping: %s", name, exc
+                )
 
 
 def _template_to_text(name: str, template: Template) -> str | None:

@@ -15,6 +15,7 @@ from unittest.mock import Mock
 
 import pytest
 import requests
+from pydantic import SecretStr
 
 from common.http import is_transient_http_error, should_retry_request
 
@@ -123,8 +124,14 @@ def test_should_retry_request_extends_with_read_timeout() -> None:
 
 
 def _patch_openai_settings_and_sleep(mocker: Any) -> None:
-    """Set OpenAI credentials and silence tenacity's backoff sleeps."""
-    mocker.patch("config.settings.settings.openai_api_key", "test-key")
+    """Set OpenAI credentials and silence tenacity's backoff sleeps.
+
+    The api-key mock must be a ``SecretStr`` because the production
+    call sites do ``settings.openai_api_key.get_secret_value()``;
+    patching with a plain string would AttributeError at runtime and
+    a regression of the SecretStr migration would surface here first.
+    """
+    mocker.patch("config.settings.settings.openai_api_key", SecretStr("test-key"))
     mocker.patch("config.settings.settings.llm_model", "gpt-4o-mini")
     # Tenacity uses time.sleep between attempts. Without this patch the
     # 429-then-200 test below would wait 2+4=6 real seconds.
@@ -133,7 +140,9 @@ def _patch_openai_settings_and_sleep(mocker: Any) -> None:
 
 def _patch_anthropic_settings_and_sleep(mocker: Any) -> None:
     """Set Anthropic credentials and silence tenacity's backoff sleeps."""
-    mocker.patch("config.settings.settings.anthropic_api_key", "test-key")
+    mocker.patch(
+        "config.settings.settings.anthropic_api_key", SecretStr("test-key")
+    )
     mocker.patch("config.settings.settings.llm_model", "claude-haiku-4-5")
     mocker.patch("time.sleep")
 

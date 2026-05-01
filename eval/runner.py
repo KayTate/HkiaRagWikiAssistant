@@ -195,7 +195,7 @@ def _ensure_openai_key_in_environ() -> None:
     if os.environ.get("OPENAI_API_KEY"):
         return
     if settings.openai_api_key:
-        os.environ["OPENAI_API_KEY"] = settings.openai_api_key
+        os.environ["OPENAI_API_KEY"] = settings.openai_api_key.get_secret_value()
         return
     raise RuntimeError(
         "OPENAI_API_KEY is not set in the environment or in .env. "

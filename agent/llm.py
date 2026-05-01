@@ -203,7 +203,7 @@ def _call_openai_with_retry(
         response = requests.post(
             url,
             headers={
-                "Authorization": f"Bearer {settings.openai_api_key}",
+                "Authorization": f"Bearer {settings.openai_api_key.get_secret_value()}",
                 "Content-Type": "application/json",
             },
             json=payload,
@@ -286,7 +286,7 @@ def _call_anthropic_with_retry(system_prompt: str, user_message: str) -> str:
         response = requests.post(
             url,
             headers={
-                "x-api-key": settings.anthropic_api_key,
+                "x-api-key": settings.anthropic_api_key.get_secret_value(),
                 "anthropic-version": "2023-06-01",
                 "Content-Type": "application/json",
             },
