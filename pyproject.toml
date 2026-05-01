@@ -3,8 +3,14 @@ name = "hkia-rag"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
-    "langgraph>=0.2,<2.0",
-    "langchain-core>=0.2,<2.0",
+    # LangGraph / LangChain are pinned to a single minor each: their
+    # 0.x→1.x transitions historically broke public APIs, so a wide
+    # ``<2.0`` upper bound would invite a silent breakage on the next
+    # minor bump. Re-evaluate these when intentionally upgrading.
+    "langgraph>=1.1,<1.2",
+    "langchain>=1.2.15,<1.3",
+    "langchain-core>=1.2,<1.3",
+    "langchain-text-splitters>=1.1.1,<1.2",
     "chromadb>=0.5,<2.0",
     "mwparserfromhell>=0.6,<1.0",
     "mlflow>=3.0,<4.0",
@@ -14,8 +20,12 @@ dependencies = [
     "tenacity>=8.0,<10.0",
     "pydantic>=2.0,<3.0",
     "pydantic-settings>=2.0,<3.0",
-    "langchain>=1.2.15,<2.0",
-    "langchain-text-splitters>=1.1.1,<2.0",
+    # litellm is not imported directly by this project — it is a
+    # required runtime dep of MLflow's GenAI scorers (Summarization,
+    # RetrievalGroundedness, etc. in eval/runner.py). MLflow does not
+    # transitively pull it in on every install path, so we list it
+    # explicitly here. Removing it surfaces as a runtime ImportError
+    # the first time mlflow.genai.evaluate runs the LLM judges.
     "litellm>=1.83.14,<2.0",
 ]
 
