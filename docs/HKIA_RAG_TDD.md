@@ -3,10 +3,20 @@
 ## Hello Kitty Island Adventure — RAG Q&A Application
 
 **Version:** 1.0  
-**Status:** Draft  
+**Status:** Design snapshot — implementation has evolved  
 **Author:** Kaycee  
 **Date:** April 2026  
 **Reference:** HKIA_RAG_PRD.md
+
+> **Reading note:** This document captures the design intent at v1.
+> The current code has diverged in several places (a `common/`
+> package, additional `agent/` modules for LLM clients and entity
+> resolution, expanded settings with `Field(description=...)`, more
+> test coverage, etc.). When details disagree, the canonical
+> references are: `docs/ARCHITECTURE.md` for the current system
+> layout and load-bearing invariants, `config/settings.py` for
+> runtime knobs, `pyproject.toml` for dependencies, and the source
+> modules themselves for implementation detail.
 
 ---
 
@@ -39,37 +49,46 @@ hkia-rag/
 ├── config/
 │   └── settings.py             # central config loaded from environment
 │
+├── common/
+│   ├── __init__.py
+│   └── http.py                 # shared retry predicates for HTTP clients
+│
 ├── ingestion/
 │   ├── __init__.py
-│   ├── api_client.py           # MediaWiki API wrapper
+│   ├── api_client.py           # MediaWiki API wrapper (batch)
 │   ├── parser.py               # wikitext → plain text via mwparserfromhell
 │   ├── chunker.py              # chunking strategies
 │   ├── embedder.py             # embedding model abstraction
-│   ├── state_db.py             # SQLite ingestion state management
+│   ├── state_db.py             # SQLite ingestion state (single + bulk helpers)
 │   └── pipeline.py             # orchestrates full and incremental ingestion
 │
 ├── vectorstore/
 │   ├── __init__.py
-│   ├── client.py               # ChromaDB client and collection management
-│   └── schema.py               # chunk metadata schema and validation
+│   ├── client.py               # ChromaDB client + embedding-model guard
+│   └── schema.py               # chunk metadata schema (with Field constraints)
 │
 ├── agent/
 │   ├── __init__.py
 │   ├── graph.py                # LangGraph graph definition
 │   ├── state.py                # agent state dataclass
 │   ├── nodes.py                # individual graph node functions
-│   └── tools.py                # retrieval tool definitions
+│   ├── llm.py                  # provider clients (Ollama / OpenAI / Anthropic)
+│   ├── extraction.py           # entity extraction + fence stripping
+│   ├── retrieval.py            # entity → chunks (variants, opensearch, redirects)
+│   └── prompts.py              # system prompt strings used by the LLM nodes
 │
 ├── eval/
 │   ├── __init__.py
 │   ├── dataset.py              # dataset loading and validation
 │   ├── generate.py             # LLM-based synthetic Q&A generation
-│   ├── scorers.py              # RAGAS-style scorer definitions
-│   └── runner.py               # MLflow experiment runner
+│   └── runner.py               # MLflow experiment runner with LLM-judge scorers
 │
 ├── app/
 │   ├── __init__.py
 │   └── gradio_app.py           # Gradio chat interface
+│
+├── scripts/
+│   └── run_eval.py             # CLI entry point for evaluation runs
 │
 ├── sync.py                     # CLI entry point for manual / cron sync
 ├── data/
@@ -79,12 +98,27 @@ hkia-rag/
 │
 ├── chroma_data/                # ChromaDB persistence directory (gitignored)
 ├── mlruns/                     # MLflow tracking store (gitignored)
+├── logs/                       # rotating logs (gitignored)
 │
-└── tests/
-    ├── __init__.py
-    ├── test_ingestion_idempotency.py
+└── tests/                      # 160 tests across 17 files
+    ├── conftest.py
     ├── test_agent_cycle_detection.py
-    └── test_embedding_version_guard.py
+    ├── test_api_client.py
+    ├── test_chunker.py
+    ├── test_dataset.py
+    ├── test_embedder.py
+    ├── test_embedding_version_guard.py
+    ├── test_entity_resolution.py
+    ├── test_generate.py
+    ├── test_gradio_app.py
+    ├── test_http_retries.py
+    ├── test_ingestion_idempotency.py
+    ├── test_llm_dispatch.py
+    ├── test_parser.py
+    ├── test_retrieval_logging.py
+    ├── test_runner.py
+    ├── test_state_db.py
+    └── test_vectorstore.py
 ```
 
 ---
@@ -121,20 +155,33 @@ Confirm installed version with `python --version`. Record the version in `.pytho
 
 ### 2.3 Core Dependencies
 
+`pyproject.toml` is the canonical source. Current pins (post-tightening
+of the LangGraph/LangChain stack to single-minor ranges):
+
 | Package | Version Constraint | Purpose |
 | --- | --- | --- |
-| `langraph` | `>=0.2` | Agent orchestration |
-| `langchain-core` | `>=0.2` | Tool and message primitives |
-| `chromadb` | `>=0.5` | Vector store |
-| `mwparserfromhell` | `>=0.6` | Wikitext parsing |
-| `mlflow` | `>=2.14` | Experiment tracking and tracing |
-| `gradio` | `>=4.0` | Chat frontend |
-| `ollama` | `>=0.2` | Local LLM and embedding client |
-| `openai` | `>=1.0` | OpenAI embeddings (experiment) |
-| `tenacity` | `>=8.0` | Retry logic for API calls |
-| `pydantic` | `>=2.0` | Config and schema validation |
-| `pytest` | `>=8.0` | Test framework (dev dependency) |
-| `pytest-mock` | `>=3.0` | Mocking for ingestion tests (dev dependency) |
+| `langgraph` | `>=1.1,<1.2` | Agent orchestration |
+| `langchain` | `>=1.2.15,<1.3` | Tool and message primitives |
+| `langchain-core` | `>=1.2,<1.3` | Tool and message primitives |
+| `langchain-text-splitters` | `>=1.1.1,<1.2` | Recursive chunker backend |
+| `chromadb` | `>=0.5,<2.0` | Vector store |
+| `mwparserfromhell` | `>=0.6,<1.0` | Wikitext parsing |
+| `mlflow` | `>=3.0,<4.0` | Experiment tracking, tracing, GenAI judges |
+| `litellm` | `>=1.83.14,<2.0` | Required runtime dep of MLflow's GenAI scorers |
+| `gradio` | `>=4.0,<7.0` | Chat frontend |
+| `ollama` | `>=0.2,<1.0` | Local LLM client (also used by eval/generate) |
+| `openai` | `>=1.0,<3.0` | Cloud LLM and embedding client |
+| `tenacity` | `>=8.0,<10.0` | Retry logic for API calls |
+| `pydantic` | `>=2.0,<3.0` | Schema validation |
+| `pydantic-settings` | `>=2.0,<3.0` | Env-based configuration |
+| `pytest` | `>=8.0,<9.0` | Test framework (dev) |
+| `pytest-mock` | `>=3.0,<4.0` | Mocking for unit tests (dev) |
+| `mypy` | `>=1.20,<2.0` | Strict type checking (dev) |
+| `ruff` | `>=0.15.8,<1.0` | Lint + import sort (dev) |
+
+`langgraph` and `langchain*` are pinned to a single minor each because
+the 0.x → 1.x transitions broke public APIs; widening would invite
+silent breakage on the next minor bump.
 
 ---
 
@@ -142,74 +189,56 @@ Confirm installed version with `python --version`. Record the version in `.pytho
 
 All configuration is loaded from environment variables via a central `config/settings.py` using Pydantic's `BaseSettings`. No hardcoded values anywhere in the codebase. Sensitive values (API keys) are never committed to git.
 
-### 3.1 settings.py
+### 3.1 settings.py (canonical: `config/settings.py`)
 
-```python
-from pydantic_settings import BaseSettings
-from typing import Literal
+The current `Settings` class declares each field with
+`pydantic.Field(description=...)` so descriptions are co-located with
+defaults and types. See `config/settings.py` for the full definition;
+this section enumerates the categories of knob the file exposes
+rather than re-stating every field.
 
-class Settings(BaseSettings):
-    # MediaWiki
-    wiki_base_url: str = "https://hellokittyislandadventure.wiki.gg"
-    wiki_api_url: str = "https://hellokittyislandadventure.wiki.gg/api.php"
-    wiki_request_delay_seconds: float = 0.75
+Categories (each is a contiguous block in `config/settings.py`):
 
-    # ChromaDB
-    chroma_persist_dir: str = "./chroma_data"
-    chroma_collection_name: str = "hkia_nomic-embed-text_recursive_v1"  # convention: hkia_{model}_{strategy}_v{n}
+- **MediaWiki** — `wiki_base_url`, `wiki_api_url`,
+  `wiki_request_delay_seconds`.
+- **ChromaDB** — `chroma_persist_dir`, `chroma_collection_name`.
+- **Embedding** — `embedding_provider`, `embedding_model`,
+  `embedding_model_version`, `openai_api_key` (`SecretStr`),
+  `openai_embedding_batch_size`.
+- **LLM** — `llm_provider`, `llm_model`, `anthropic_api_key`
+  (`SecretStr`), `ollama_request_timeout_seconds`.
+- **LangGraph agent** — `agent_max_iterations`.
+- **SQLite** — `state_db_path`.
+- **MLflow** — `mlflow_tracking_uri`, `mlflow_experiment_name`.
+- **Chunking** — `chunking_strategy`, `chunk_size`, `chunk_overlap`.
+- **Retrieval** — `retrieval_top_k`,
+  `retrieval_similarity_threshold`.
+- **Retrieval logging** — `retrieval_log_enabled`,
+  `retrieval_log_file`.
 
-    # Embedding
-    embedding_provider: Literal["ollama", "openai"] = "ollama"
-    embedding_model: str = "nomic-embed-text"
-    embedding_model_version: str = "v1.5"
-    openai_api_key: str = ""  # required if embedding_provider = openai
-    openai_embedding_batch_size: int = 100
+Notes that have changed since v1 of this design doc:
 
-    # LLM
-    llm_provider: Literal["ollama", "openai", "anthropic"] = "openai"
-    llm_model: str = "gpt-5.4-mini"
-    anthropic_api_key: str = ""
-    openai_api_key: str = ""
+- API keys are typed `SecretStr` (not `str`); read-paths must call
+  `.get_secret_value()`.
+- Pydantic v2 model configuration uses `model_config =
+  SettingsConfigDict(...)` instead of the deprecated `class Config:`.
+- `ollama_request_timeout_seconds` was added when the previously
+  hard-coded 300s timeout proved too long for the agent's iteration ×
+  parse-retry budget.
 
-    # LangGraph
-    agent_max_iterations: int = 10
+### 3.2 .env.example (canonical: `.env.example`)
 
-    # SQLite
-    state_db_path: str = "./data/ingestion_state.db"
+The repository ships a fully-populated `.env.example` with every
+setting commented in-place. Copy and edit:
 
-    # MLflow
-    mlflow_tracking_uri: str = "./mlruns"
-    mlflow_experiment_name: str = "hkia_rag"
-
-    # Chunking
-    chunking_strategy: Literal["recursive", "section"] = "recursive"
-    chunk_size: int = 512
-    chunk_overlap: int = 64
-
-    # Retrieval
-    retrieval_top_k: int = 5
-    retrieval_similarity_threshold: float = 0.7
-
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-
-settings = Settings()
+```bash
+cp .env.example .env
 ```
 
-### 3.2 .env.example
-
-```text
-WIKI_BASE_URL=https://hellokittyislandadventure.wiki.gg
-CHROMA_COLLECTION_NAME=hkia_nomic-embed-text_recursive_v1
-EMBEDDING_PROVIDER=ollama
-EMBEDDING_MODEL=nomic-embed-text
-EMBEDDING_MODEL_VERSION=v1.5
-LLM_PROVIDER=ollama
-LLM_MODEL=gpt-5.4-mini
-OPENAI_API_KEY=
-ANTHROPIC_API_KEY=
-```
+The file groups variables under headed sections (API keys,
+MediaWiki, ChromaDB, Embedding, LLM, LangGraph agent, SQLite,
+MLflow, Chunking, Retrieval, Retrieval logging) and notes the
+embedding-drift constraint inline next to `CHROMA_COLLECTION_NAME`.
 
 ---
 
@@ -817,9 +846,18 @@ The cron entry is documented in the README but not automated — it must be set 
 
 ### 10.2 Scope
 
-Tests are targeted at the three highest-risk logic areas. Full coverage is not a goal for v1 — the tradeoff is development speed against safety. The three areas chosen are those where silent failures would be hardest to detect through manual use of the app.
+The original v1 plan targeted three highest-risk logic areas (the
+specs below) on the explicit tradeoff that broader coverage was not a
+goal yet. Coverage has since expanded to most modules — see the test
+file list in Section 1 — but the v1 specs remain the load-bearing
+behavioral guarantees and are pinned with assertions that fail loudly
+if violated. New test files (`test_http_retries.py`,
+`test_state_db.py`, `test_vectorstore.py`, `test_parser.py`,
+`test_chunker.py`, `test_embedder.py`, `test_api_client.py`,
+`test_llm_dispatch.py`, `test_generate.py`, `test_retrieval_logging.py`)
+extend coverage without superseding these.
 
-### 10.3 Test Specifications
+### 10.3 v1 Test Specifications
 
 **`tests/test_ingestion_idempotency.py`**
 

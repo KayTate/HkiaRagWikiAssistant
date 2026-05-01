@@ -63,16 +63,42 @@ Copy the example environment file and fill in any API keys:
 cp .env.example .env
 ```
 
-Key settings:
+`.env.example` documents every setting with a one-line comment;
+`config/settings.py` has the canonical `Field(description=...)` for each
+one. The most commonly adjusted variables:
 
-| Variable | Default | Description |
+| Variable | Default | Notes |
 | --- | --- | --- |
 | `EMBEDDING_PROVIDER` | `ollama` | `ollama` or `openai` |
-| `EMBEDDING_MODEL` | `nomic-embed-text` | Embedding model name |
+| `EMBEDDING_MODEL` | `nomic-embed-text` | See "Embedding model drift" below |
 | `LLM_PROVIDER` | `openai` | `ollama`, `openai`, or `anthropic` |
-| `LLM_MODEL` | `gpt-4o-mini` | LLM model name |
-| `OPENAI_API_KEY` | (empty) | Required if using OpenAI |
-| `ANTHROPIC_API_KEY` | (empty) | Required if using Anthropic |
+| `LLM_MODEL` | `gpt-4o-mini` | Model name passed to the provider |
+| `OPENAI_API_KEY` | (empty) | Required for OpenAI; also for eval LLM judges |
+| `ANTHROPIC_API_KEY` | (empty) | Required for Anthropic |
+| `OLLAMA_REQUEST_TIMEOUT_SECONDS` | `180` | Raise for 70B+ local models |
+| `AGENT_MAX_ITERATIONS` | `10` | Hard ceiling on agent retrieve→extract loop |
+
+### Embedding model drift
+
+The agent and the ChromaDB collection must use the same embedding
+model — mixing vectors from different models silently corrupts search
+results. The startup sync check enforces this and **will not
+auto-repair**.
+
+If you change `EMBEDDING_MODEL` or `EMBEDDING_MODEL_VERSION`, you must
+also create a new collection and re-ingest:
+
+1. Bump `CHROMA_COLLECTION_NAME` using the convention
+   `hkia_{embedding_model}_{chunking_strategy}_v{n}` (e.g.
+   `hkia_nomic-embed-text_recursive_v2` →
+   `hkia_nomic-embed-text_recursive_v3`).
+2. Run `python sync.py --mode full` to build the new collection.
+3. Point your `.env` at the new collection name.
+
+Attempting to ingest into a collection whose stored chunks were
+embedded with a different model raises `EmbeddingModelMismatchError`
+with the same remediation steps in the message. The same convention
+applies to changing `CHUNKING_STRATEGY`.
 
 ## Usage
 
@@ -138,21 +164,35 @@ Prerequisites:
 
 Inspect runs in the MLflow UI (see above).
 
+## Architecture
+
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) is the living
+description of the system: how the ingestion / vector store / agent /
+eval subsystems wire together, where to look for what, and which
+invariants are load-bearing. Read it before making structural changes
+or onboarding a new contributor.
+
+[`docs/HKIA_RAG_PRD.md`](docs/HKIA_RAG_PRD.md) and
+[`docs/HKIA_RAG_TDD.md`](docs/HKIA_RAG_TDD.md) capture the original
+product requirements and v1 technical design respectively.
+
 ## Project Structure
 
 ```text
 hkia-rag/
 ├── config/settings.py          # Central config via pydantic-settings
+├── common/                     # Cross-package utilities
+│   └── http.py                 # Shared retry predicates for HTTP clients
 ├── ingestion/                  # Wiki ingestion pipeline
 │   ├── api_client.py           # MediaWiki API wrapper (batch)
 │   ├── parser.py               # Wikitext parsing with template expansion
 │   ├── chunker.py              # Recursive and section-based chunking
 │   ├── embedder.py             # Ollama and OpenAI embedding providers
-│   ├── state_db.py             # SQLite ingestion state tracking
+│   ├── state_db.py             # SQLite ingestion state tracking (bulk helpers)
 │   └── pipeline.py             # Full and incremental ingestion orchestration
 ├── vectorstore/                # ChromaDB vector store
-│   ├── client.py               # Search, upsert, and embedding model guard
-│   └── schema.py               # ChunkMetadata Pydantic model
+│   ├── client.py               # Search, upsert, and embedding-model guard
+│   └── schema.py               # ChunkMetadata Pydantic model (with constraints)
 ├── agent/                      # LangGraph agentic retrieval
 │   ├── graph.py                # State graph definition and compilation
 │   ├── state.py                # AgentState dataclass
@@ -168,7 +208,7 @@ hkia-rag/
 ├── app/gradio_app.py           # Gradio chat frontend
 ├── sync.py                     # CLI entry point for ingestion
 ├── scripts/run_eval.py         # CLI entry point for evaluation runs
-└── tests/                      # pytest test suite
+└── tests/                      # pytest test suite (160 tests)
 ```
 
 ## Running Tests
