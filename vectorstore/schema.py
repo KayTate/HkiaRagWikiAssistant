@@ -21,12 +21,12 @@ class ChunkMetadata(BaseModel):
 
     source_title: str
     source_url: str
-    section: str  # empty string if unsectioned, never None
+    section: str
     category: str
     chunk_index: int = Field(ge=0)
-    revision_id: int = Field(ge=-1)  # -1 sentinel during stale-row reset
-    ingested_at: str  # ISO 8601
-    embedding_model: str  # format: "{model_name}:{version}"
+    revision_id: int = Field(ge=-1)
+    ingested_at: str
+    embedding_model: str
     chunking_strategy: str
     chunk_size: int = Field(gt=0)
     chunk_overlap: int = Field(ge=0)

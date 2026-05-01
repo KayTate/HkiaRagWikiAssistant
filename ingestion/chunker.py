@@ -5,6 +5,7 @@ section-aware splitting that preserves section headings as context.
 """
 
 import logging
+from typing import Any
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
@@ -18,7 +19,7 @@ def chunk_text(
     strategy: str,
     chunk_size: int,
     overlap: int,
-    sections: list[dict] | None = None,  # type: ignore[type-arg]
+    sections: list[dict[str, Any]] | None = None,
 ) -> list[str]:
     """Split text into chunks using the specified strategy.
 
@@ -68,7 +69,7 @@ def recursive_chunk(text: str, chunk_size: int, overlap: int) -> list[str]:
 
 
 def section_chunk(
-    sections: list[dict],  # type: ignore[type-arg]
+    sections: list[dict[str, Any]],
     chunk_size: int,
     overlap: int,
 ) -> list[str]:

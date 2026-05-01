@@ -1,21 +1,6 @@
-"""Pure text-extraction helpers for the HKIA agent.
-
-Functions in this module convert text in (a user question, an LLM
-response) to text out (an entity name, a fence-stripped string). They
-are deliberately scoped to leaf utilities — no AgentState, no logging,
-no LLM calls — so they can be tested in isolation and shared between
-node-level orchestration in ``agent.nodes`` and any future caller.
-
-Stateful extraction orchestration (the JSON-parse retry loop, the
-state-mutating apply/handle helpers) lives in ``agent.nodes`` because
-it depends on AgentState and the node-level observability wrappers.
-
-Entity-extraction helpers (``_normalize_entity``,
-``_extract_entity_from_question``) keep their leading-underscore
-prefix — they are package-internal, consumed only by ``agent.nodes``.
-``strip_markdown_fences`` drops the prefix because ``eval.generate``
-also imports it: it is the project's canonical implementation.
-"""
+"""Pure text-extraction helpers for the HKIA agent: question → entity, LLM
+response → fence-stripped string. Leaf utilities only — no AgentState, no
+logging, no LLM calls."""
 
 import re
 
@@ -28,18 +13,7 @@ _TRAILING_DESCRIPTOR_RE = re.compile(
 
 
 def _normalize_entity(raw: str) -> str:
-    """Strip leading articles and trailing descriptors from an extracted entity.
-
-    Iterates until stable because an entity can contain both (e.g.
-    'the Wild Mountain Time quest series' → 'Wild Mountain Time').
-
-    Args:
-        raw: Raw captured entity text from the regex extractor.
-
-    Returns:
-        Cleaned entity name. May be empty string if input was only
-        articles and descriptors.
-    """
+    """Strip leading articles and trailing descriptors; iterates until stable."""
     entity = raw.strip().strip("\"'")
     prev: str | None = None
     while prev != entity:

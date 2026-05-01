@@ -49,18 +49,7 @@ SCORER_METRIC_NAMES = [
 def _load_and_transform_dataset(
     dataset_path: str,
 ) -> list[dict[str, Any]]:
-    """Load the golden set JSON and transform it for mlflow.genai.evaluate().
-
-    Moves ``expected_response`` into ``expectations.expected_response``
-    so the Correctness scorer can find ground truth.  Metadata is
-    preserved at the top level (evaluate() ignores unrecognised keys).
-
-    Args:
-        dataset_path: Filesystem path to the golden JSON file.
-
-    Returns:
-        List of dicts in the format expected by evaluate().
-    """
+    """Load the golden set JSON and transform it for ``mlflow.genai.evaluate``."""
     raw_text = Path(dataset_path).read_text(encoding="utf-8")
     raw: list[dict[str, Any]] = json.loads(raw_text)
 
@@ -79,18 +68,7 @@ def _load_and_transform_dataset(
 
 
 def _build_predict_fn() -> Any:
-    """Compile the agent graph and return a predict function.
-
-    MLflow LangChain autolog is enabled inside ``compile_graph()``,
-    so traces are produced automatically for each invocation.
-
-    The returned function takes the question as a keyword argument
-    matching the ``inputs`` dict keys in the dataset, because
-    ``mlflow.genai.evaluate`` calls predict_fn with ``**inputs``.
-
-    Returns:
-        A callable ``(question: str) -> str`` suitable for evaluate().
-    """
+    """Compile the agent graph and return a ``(question) -> str`` predict fn."""
     graph = compile_graph()
 
     def predict_fn(question: str) -> str:
@@ -103,11 +81,7 @@ def _build_predict_fn() -> Any:
 
 
 def _build_scorers() -> list[Any]:
-    """Instantiate the four LLM judge scorers.
-
-    Returns:
-        List of scorer instances configured with the judge model.
-    """
+    """Instantiate the four LLM judge scorers."""
     from mlflow.genai.scorers import (
         Correctness,
         RelevanceToQuery,

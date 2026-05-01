@@ -1,28 +1,6 @@
 """Shared HTTP retry predicates used across the agent and ingestion clients.
-
-Hosts the single canonical version of the transient-status filter so a
-change to "what counts as retryable" lands in one place. Previously
-each call site (``agent.llm``, ``ingestion.api_client``,
-``ingestion.embedder``) carried its own ``_TRANSIENT_STATUS_CODES``
-constant and ``_is_transient_http_error`` helper, which had already
-drifted in docstrings and were one careless edit away from drifting in
-behavior too.
-
-Two predicates are exported:
-
-- ``is_transient_http_error`` — HTTP-status-only filter. Used by the
-  cloud LLM clients (OpenAI, Anthropic) and the OpenAI embedder, which
-  did not previously retry on ``ReadTimeout`` and we are deliberately
-  not widening their behavior in the refactor that pulled this module
-  out.
-- ``should_retry_request`` — the api_client extension that adds
-  ``ReadTimeout`` to the retryable set, since wiki batch fetches pull
-  large payloads and a slow response is almost always transient.
-
-Lives in a dedicated ``common`` package rather than under ``agent`` or
-``ingestion`` so neither subsystem becomes a transitive dependency of
-the other through this helper.
-"""
+``is_transient_http_error`` filters by HTTP status only; ``should_retry_request``
+extends it with ``ReadTimeout`` for the wiki API client."""
 
 import requests
 

@@ -1,9 +1,4 @@
-"""Gradio frontend for the Hello Kitty Island Adventure RAG assistant.
-
-Implements a single-page chat interface backed by the LangGraph agent.
-The agent.graph import is deferred inside the respond function so this
-module can be imported and tested independently.
-"""
+"""Gradio frontend for the HKIA RAG assistant: a chat UI over the LangGraph agent."""
 
 import sys
 from pathlib import Path
@@ -14,9 +9,12 @@ _project_root = str(Path(__file__).resolve().parent.parent)
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
-from typing import Any
+from typing import Any  # noqa: E402
 
-import gradio as gr
+import gradio as gr  # noqa: E402
+
+from agent.graph import compile_graph  # noqa: E402
+from agent.state import AgentState  # noqa: E402
 
 
 def _history_to_messages(history: list[Any]) -> list[Any]:
@@ -55,9 +53,6 @@ def _history_to_messages(history: list[Any]) -> list[Any]:
 def respond(message: str, history: list[Any]) -> str:
     """Handle a single chat turn by invoking the RAG agent graph.
 
-    The agent.graph import is deferred here so this module is importable
-    even when Engineer 2's agent graph has not been implemented yet.
-
     Args:
         message: The user's current message text.
         history: The prior chat turns as provided by gr.ChatInterface.
@@ -65,15 +60,6 @@ def respond(message: str, history: list[Any]) -> str:
     Returns:
         The agent's response as a plain string.
     """
-    try:
-        from agent.graph import compile_graph
-        from agent.state import AgentState
-    except ImportError:
-        return (
-            "The agent graph is not available yet. "
-            "Please ensure the agent module is installed and try again."
-        )
-
     graph = compile_graph()
     state = AgentState(
         question=message,

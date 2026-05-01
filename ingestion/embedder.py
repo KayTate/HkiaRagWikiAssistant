@@ -80,17 +80,7 @@ def ollama_embed(chunks: list[str]) -> list[list[float]]:
     reraise=True,
 )
 def _embed_batch_ollama(chunks: list[str]) -> list[list[float]]:
-    """Send a batched embedding request to the Ollama /api/embed endpoint.
-
-    Args:
-        chunks: Batch of text strings to embed (max 50).
-
-    Returns:
-        Embedding vectors in the same order as the input batch.
-
-    Raises:
-        EmbeddingError: If the response structure is unexpected.
-    """
+    """Send one batched request to Ollama's /api/embed endpoint."""
     url = "http://localhost:11434/api/embed"
     try:
         response = requests.post(
@@ -150,21 +140,7 @@ def openai_embed(chunks: list[str]) -> list[list[float]]:
     reraise=True,
 )
 def _embed_batch_openai(batch: list[str]) -> list[list[float]]:
-    """Send a single batched embedding request to the OpenAI API.
-
-    Retries automatically on HTTP 429 via tenacity. Other HTTP errors
-    are raised immediately after the first failure.
-
-    Args:
-        batch: Batch of text strings to embed.
-
-    Returns:
-        Embedding vectors in the same order as the input batch.
-
-    Raises:
-        EmbeddingError: If the response structure is unexpected.
-        requests.HTTPError: On non-transient HTTP errors.
-    """
+    """Send one batched request to OpenAI's /v1/embeddings endpoint."""
     try:
         response = requests.post(
             "https://api.openai.com/v1/embeddings",
@@ -183,7 +159,6 @@ def _embed_batch_openai(batch: list[str]) -> list[list[float]]:
                 response.status_code,
             )
         response.raise_for_status()
-        # response.json() returns Any; API response shape is external/untyped
         data = response.json()
         sorted_items = sorted(data["data"], key=lambda item: int(item["index"]))
         return [[float(x) for x in item["embedding"]] for item in sorted_items]

@@ -43,33 +43,12 @@ REQUIRED_PAIR_KEYS = {"question", "answer", "question_type"}
 
 
 def _estimate_token_count(text: str) -> int:
-    """Estimate token count by whitespace-splitting the text.
-
-    A rough approximation sufficient for deciding whether a chunk is
-    short enough to warrant fewer generated pairs.
-
-    Args:
-        text: The text to estimate token count for.
-
-    Returns:
-        Number of whitespace-delimited tokens in the text.
-    """
+    """Rough token-count estimate via whitespace split."""
     return len(text.split())
 
 
 def _resolve_pair_count(chunk_text: str, n_pairs: int | None) -> int:
-    """Determine how many pairs to generate for a given chunk.
-
-    Defaults to 1 for short chunks (under the token threshold) and 2
-    for longer ones, unless the caller explicitly overrides.
-
-    Args:
-        chunk_text: The chunk text being evaluated for length.
-        n_pairs: Caller-supplied override; if not None, used as-is.
-
-    Returns:
-        The number of pairs to request from the LLM.
-    """
+    """Pick how many pairs to generate (caller override > short-chunk default)."""
     if n_pairs is not None:
         return n_pairs
     if _estimate_token_count(chunk_text) <= SHORT_CHUNK_TOKEN_THRESHOLD:

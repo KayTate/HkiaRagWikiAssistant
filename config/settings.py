@@ -1,10 +1,4 @@
-"""Central runtime configuration loaded from environment / ``.env``.
-
-Every setting carries a ``Field(description=...)`` so a future pass can
-auto-generate ``.env.example`` from this file rather than hand-syncing
-the two — but for now the sample file is maintained manually and the
-descriptions are the canonical reference for operators.
-"""
+"""Central runtime configuration loaded from environment / ``.env``."""
 
 from typing import Literal
 
@@ -27,7 +21,7 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
     )
 
-    # MediaWiki ----------------------------------------------------------
+    # MediaWiki
     wiki_base_url: str = Field(
         default="https://hellokittyislandadventure.wiki.gg",
         description=(
@@ -47,7 +41,7 @@ class Settings(BaseSettings):
         ),
     )
 
-    # ChromaDB -----------------------------------------------------------
+    # ChromaDB
     chroma_persist_dir: str = Field(
         default="./chroma_data",
         description="On-disk path for the ChromaDB persistent store.",
@@ -62,7 +56,7 @@ class Settings(BaseSettings):
         ),
     )
 
-    # Embedding ----------------------------------------------------------
+    # Embedding
     embedding_provider: Literal["ollama", "openai"] = Field(
         default="ollama",
         description="Which embedding backend the ingestion pipeline uses.",
@@ -82,10 +76,6 @@ class Settings(BaseSettings):
             "and ChromaDB metadata."
         ),
     )
-    # API keys are SecretStr so a stray ``repr(settings)`` in a log
-    # never reveals the value. Read-paths must call
-    # ``.get_secret_value()`` to extract the raw string for headers
-    # and env-var assignments.
     openai_api_key: SecretStr = Field(
         default=SecretStr(""),
         description=(
@@ -99,7 +89,7 @@ class Settings(BaseSettings):
         description="Number of chunks per OpenAI /embeddings request.",
     )
 
-    # LLM ----------------------------------------------------------------
+    # LLM
     llm_provider: Literal["ollama", "openai", "anthropic"] = Field(
         default="openai",
         description="Which LLM backend the agent calls for extract / synthesize.",
@@ -112,10 +102,6 @@ class Settings(BaseSettings):
         default=SecretStr(""),
         description="Required when llm_provider='anthropic'.",
     )
-    # Ollama runs locally; the default suits small/medium models and
-    # bounds worst-case stall time when a process hangs. Bump for
-    # large local models (e.g. 70B) where a single completion can
-    # legitimately exceed three minutes.
     ollama_request_timeout_seconds: int = Field(
         default=180,
         description=(
@@ -126,7 +112,7 @@ class Settings(BaseSettings):
         ),
     )
 
-    # LangGraph agent ----------------------------------------------------
+    # LangGraph agent
     agent_max_iterations: int = Field(
         default=10,
         description=(
@@ -137,13 +123,13 @@ class Settings(BaseSettings):
         ),
     )
 
-    # SQLite -------------------------------------------------------------
+    # SQLite
     state_db_path: str = Field(
         default="./data/ingestion_state.db",
         description="SQLite file holding per-page ingestion status and revision IDs.",
     )
 
-    # MLflow -------------------------------------------------------------
+    # MLflow
     mlflow_tracking_uri: str = Field(
         default="./mlruns",
         description=(
@@ -156,7 +142,7 @@ class Settings(BaseSettings):
         description="Default MLflow experiment name for agent traces.",
     )
 
-    # Chunking -----------------------------------------------------------
+    # Chunking
     chunking_strategy: Literal["recursive", "section"] = Field(
         default="recursive",
         description=(
@@ -174,7 +160,7 @@ class Settings(BaseSettings):
         description="Overlap in characters between consecutive chunks.",
     )
 
-    # Retrieval ----------------------------------------------------------
+    # Retrieval
     retrieval_top_k: int = Field(
         default=5,
         description="Number of chunks returned by semantic_search per call.",
@@ -187,7 +173,7 @@ class Settings(BaseSettings):
         ),
     )
 
-    # Retrieval logging --------------------------------------------------
+    # Retrieval logging
     retrieval_log_enabled: bool = Field(
         default=True,
         description=(

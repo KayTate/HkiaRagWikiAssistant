@@ -1,10 +1,4 @@
-"""System prompt strings used by the HKIA agent's LLM-driven nodes.
-
-Centralised here so the prompt copy can be reviewed and tuned in one
-place without sifting through node-implementation code. The constants
-keep their leading-underscore prefix because they are package-internal
-(consumed only by ``agent.nodes``); they are not part of any public API.
-"""
+"""System prompt strings used by the HKIA agent's LLM-driven nodes."""
 
 _EXTRACT_SYSTEM_PROMPT = (
     "You are analyzing wiki content for Hello Kitty Island Adventure. "

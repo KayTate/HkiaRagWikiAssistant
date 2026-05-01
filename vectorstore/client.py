@@ -29,11 +29,7 @@ _chroma_client: ClientAPI | None = None
 
 
 def _get_client() -> ClientAPI:
-    """Return the shared ChromaDB persistent client, creating it on first call.
-
-    Uses a module-level singleton to avoid re-opening the persistent store
-    on every call.
-    """
+    """Return the shared ChromaDB persistent client, creating it on first call."""
     global _chroma_client
     if _chroma_client is None:
         logger.info(
@@ -45,30 +41,19 @@ def _get_client() -> ClientAPI:
 
 
 def reset_client() -> None:
-    """Reset the ChromaDB client singleton. Intended for test teardown.
-
-    Prevents cross-test contamination when tests patch ``chroma_persist_dir``
-    to different paths. No-op if the client was never initialized.
-    """
+    """Reset the ChromaDB client singleton. Intended for test teardown."""
     global _chroma_client
     _chroma_client = None
 
 
 def get_or_create_collection(name: str) -> Collection:
-    """Return the named ChromaDB collection, creating it if absent.
-
-    Args:
-        name: Collection name. Typically settings.chroma_collection_name.
-
-    Returns:
-        The existing or newly created ChromaDB collection object.
-    """
+    """Return the named ChromaDB collection, creating it if absent."""
     client = _get_client()
     return client.get_or_create_collection(name=name)
 
 
 def _current_embedding_model() -> str:
-    """Return the formatted embedding model identifier from current settings."""
+    """Return ``"{model}:{version}"`` from current settings."""
     return f"{settings.embedding_model}:{settings.embedding_model_version}"
 
 
@@ -97,10 +82,6 @@ def verify_collection_embedding_model() -> None:
     if count == 0:
         return
 
-    # Two-step fetch: get all IDs first (cheap — short strings), then
-    # random.sample and look up metadatas for just the chosen IDs. This
-    # avoids loading every chunk's full metadata while still giving a
-    # uniform sample across the collection.
     all_ids: list[str] = collection.get(include=[]).get("ids") or []
     if not all_ids:
         return
@@ -163,7 +144,6 @@ def upsert_chunks(
     collection = get_or_create_collection(settings.chroma_collection_name)
     ids = [f"{page_title}::{meta.chunk_index}" for meta in metadatas]
     meta_dicts = [meta.model_dump() for meta in metadatas]
-    # chromadb's upsert type expects numpy arrays but also accepts list[Sequence[float]]
     collection.upsert(
         ids=ids,
         documents=chunks,
@@ -173,17 +153,8 @@ def upsert_chunks(
 
 
 def delete_chunks_by_source(page_title: str) -> None:
-    """Delete all chunks associated with a specific wiki page.
-
-    Safe to call even if the page has no chunks — this is a no-op in
-    that case. Used before re-ingesting a page to prevent duplicate chunks
-    from accumulating across retries.
-
-    Args:
-        page_title: The wiki page title to delete chunks for.
-    """
+    """Delete all chunks associated with a specific wiki page (no-op if absent)."""
     collection = get_or_create_collection(settings.chroma_collection_name)
-    # chromadb Where type is complex; cast to suppress the mypy mismatch
     where: Any = {"source_title": {"$eq": page_title}}
     collection.delete(where=where)
 
@@ -255,10 +226,6 @@ def get_page_by_title(page_title: str) -> list[dict[str, Any]]:
         {"text": doc, "metadata": meta}
         for doc, meta in zip(documents, metadatas_raw, strict=True)
     ]
-    # ChromaDB returns metadata as ``Any`` and may yield ``None`` for
-    # rows ingested before metadata was schema-enforced. Coerce to
-    # empty dict at the boundary so the sort key never AttributeErrors
-    # on bad data — a single legacy row should not crash the whole
-    # page-load path.
+    # ChromaDB may return None for legacy unschemed rows.
     pairs.sort(key=lambda p: (p["metadata"] or {}).get("chunk_index", 0))
     return pairs

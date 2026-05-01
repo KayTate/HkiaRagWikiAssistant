@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 def _current_embedding_model() -> str:
-    """Return the formatted embedding model identifier from current settings."""
+    """Return ``"{model}:{version}"`` from current settings."""
     return f"{settings.embedding_model}:{settings.embedding_model_version}"
 
 
@@ -104,18 +104,7 @@ def run_incremental_ingestion() -> None:
 def _mark_all_pages_pending(
     pages: list[dict[str, str | int]],
 ) -> None:
-    """Mark every page as pending using pre-fetched revision IDs.
-
-    Used by full ingestion to queue all pages for re-ingestion. Revision
-    IDs come from the batch API call, avoiding per-page lookups. Writes
-    the whole batch in a single SQLite transaction via
-    ``state_db.upsert_pages`` — for a wiki with thousands of pages this
-    avoids opening that many connections.
-
-    Args:
-        pages: List of dicts with 'title' (str) and 'revision_id' (int)
-            from get_all_pages_with_revision_ids().
-    """
+    """Mark every page as pending using pre-fetched revision IDs."""
     current_model = _current_embedding_model()
     rows: list[state_db.PageStateRow] = [
         {
@@ -132,20 +121,7 @@ def _mark_all_pages_pending(
 def _mark_changed_pages_pending(
     pages: list[dict[str, str | int]],
 ) -> None:
-    """Identify new or updated pages and mark them pending for re-ingestion.
-
-    Pages not yet in the state database are inserted as pending. Pages
-    whose revision ID has changed since last ingestion are reset to
-    pending. Complete pages with unchanged revisions are left untouched.
-
-    Uses one ``state_db.get_pages`` call (single SELECT with WHERE
-    page_title IN (...)) plus one ``state_db.upsert_pages`` call for
-    the changed subset, replacing N+M per-row connection round-trips.
-
-    Args:
-        pages: List of dicts with 'title' (str) and 'revision_id' (int)
-            from get_all_pages_with_revision_ids().
-    """
+    """Mark new or revision-changed pages as pending; leave unchanged ones alone."""
     current_model = _current_embedding_model()
     titles = [str(p["title"]) for p in pages]
     existing_by_title = state_db.get_pages(titles)
@@ -203,9 +179,6 @@ def _process_pending_pages() -> None:
                 _ingest_page(title, page["revision_id"], wikitext)
                 succeeded += 1
             except Exception:
-                # _ingest_page already logged via logger.exception with
-                # full context; status remains 'in_progress' and the
-                # page will be retried on the next run.
                 failed += 1
 
     logger.info(
@@ -244,7 +217,7 @@ def _ingest_page(page_title: str, revision_id: int, wikitext: str) -> None:
         )
         if not chunks:
             logger.warning("No chunks produced for '%s', skipping", page_title)
-            _finalize_page(page_title, revision_id, current_model, [], [])
+            _finalize_page(page_title, revision_id, current_model)
             return
 
         embeddings = embedder.embed_chunks(chunks)
@@ -265,17 +238,7 @@ def _build_metadatas(
     chunks: list[str],
     current_model: str,
 ) -> list[ChunkMetadata]:
-    """Construct ChunkMetadata instances for each chunk of a page.
-
-    Args:
-        page_title: The wiki page title.
-        revision_id: The MediaWiki revision ID at ingestion time.
-        chunks: The list of text chunks for this page.
-        current_model: Formatted embedding model identifier.
-
-    Returns:
-        One ChunkMetadata per chunk in input order.
-    """
+    """Construct one ChunkMetadata per chunk of a page, in input order."""
     source_url = f"{settings.wiki_base_url}/wiki/{page_title.replace(' ', '_')}"
     ingested_at = datetime.now(UTC).isoformat()
     return [
@@ -304,21 +267,7 @@ def _write_to_stores(
     metadatas: list[ChunkMetadata],
     current_model: str,
 ) -> None:
-    """Atomically replace ChromaDB chunks and update SQLite status to complete.
-
-    The delete-before-upsert pattern ensures idempotency across retries.
-    ChromaDB and SQLite are always written with the same embedding_model
-    value in this function — there is no code path that writes one without
-    the other.
-
-    Args:
-        page_title: The wiki page title.
-        revision_id: The MediaWiki revision ID used in the chunk metadata.
-        chunks: Text chunks for this page.
-        embeddings: Embedding vectors, one per chunk.
-        metadatas: ChunkMetadata instances, one per chunk.
-        current_model: Formatted embedding model identifier.
-    """
+    """Replace ChromaDB chunks and update SQLite status to complete."""
     vectorstore_client.delete_chunks_by_source(page_title)
     if chunks:
         vectorstore_client.upsert_chunks(page_title, chunks, embeddings, metadatas)
@@ -335,22 +284,8 @@ def _finalize_page(
     page_title: str,
     revision_id: int,
     current_model: str,
-    chunks: list[str],
-    embeddings: list[list[float]],
 ) -> None:
-    """Handle the empty-chunk edge case by cleaning up and marking complete.
-
-    If a page produces no chunks (e.g. it is empty after parsing), we
-    still delete any stale ChromaDB entries and mark it complete so
-    it is not repeatedly retried.
-
-    Args:
-        page_title: The wiki page title.
-        revision_id: The revision ID for this page.
-        current_model: Formatted embedding model identifier.
-        chunks: Empty list in the empty-page case.
-        embeddings: Empty list in the empty-page case.
-    """
+    """Empty-chunk edge case: clean up stale ChromaDB entries, mark complete."""
     vectorstore_client.delete_chunks_by_source(page_title)
     state_db.upsert_page(
         page_title=page_title,

@@ -1,13 +1,9 @@
 """Tests for app/gradio_app.py — acceptance criterion: module is importable
 and the demo object is a gr.ChatInterface instance."""
 
-import builtins
-import importlib
-from collections.abc import Mapping, Sequence
 from typing import Any
 
 import gradio as gr
-import pytest
 
 
 def test_gradio_app_is_importable() -> None:
@@ -20,40 +16,6 @@ def test_demo_is_chat_interface_instance() -> None:
     from app.gradio_app import demo
 
     assert isinstance(demo, gr.ChatInterface)
-
-
-def test_respond_returns_fallback_when_agent_graph_unavailable(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """respond returns a user-friendly string when agent.graph cannot be imported."""
-    real_import = builtins.__import__
-
-    def _mock_import(
-        name: str,
-        globals: Mapping[str, object] | None = None,
-        locals: Mapping[str, object] | None = None,
-        fromlist: Sequence[str] = (),
-        level: int = 0,
-    ) -> Any:  # Any is required — __import__ return type is not narrowable
-        if name == "agent.graph":
-            raise ImportError("agent.graph not available")
-        return real_import(name, globals, locals, fromlist, level)
-
-    monkeypatch.setattr(builtins, "__import__", _mock_import)
-
-    # Re-import respond after patching so the lazy import fires fresh.
-    module = importlib.import_module("app.gradio_app")
-    respond = module.respond
-
-    result = respond("What quests unlock Ice and Glow?", [])
-    assert isinstance(result, str)
-    # Match a distinctive substring of the production fallback message in
-    # app/gradio_app.py rather than just len > 0, so a regression that
-    # silently returns an exception's str() or some other non-empty
-    # placeholder fails the test instead of slipping through.
-    assert "agent graph is not available" in result, (
-        f"Expected fallback message to mention the missing agent graph; got {result!r}"
-    )
 
 
 def test_history_to_messages_handles_dict_format() -> None:

@@ -9,6 +9,7 @@ preserved in the output.
 
 import logging
 import re
+from typing import Any
 
 import mwparserfromhell
 from mwparserfromhell.nodes import Template
@@ -18,15 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 def _expand_templates(parsed: Wikicode) -> None:
-    """Replace known wiki templates with their plain-text equivalents in-place.
-
-    Handles the most common templates used on the HKIA wiki so that item
-    names, recipe ingredients, and game metadata survive strip_code().
-    Unknown templates are left untouched for strip_code() to remove.
-
-    Args:
-        parsed: A mwparserfromhell Wikicode object to modify in place.
-    """
+    """Replace known wiki templates with plain-text equivalents in-place."""
     for template in parsed.filter_templates(recursive=True):
         name = template.name.strip_code().strip().lower()
         replacement = _template_to_text(name, template)
@@ -72,14 +65,7 @@ def _template_to_text(name: str, template: Template) -> str | None:
 
 
 def _expand_icon_link(template: Template) -> str:
-    """Expand {{Icon/Link|Name|text=Display}} to the display name.
-
-    Args:
-        template: An Icon/Link template node.
-
-    Returns:
-        The item/entity name as plain text.
-    """
+    """Expand ``{{Icon/Link|Name|text=Display}}`` to the display name."""
     if template.has("text"):
         return str(template.get("text").value).strip()
     if template.params:
@@ -88,14 +74,7 @@ def _expand_icon_link(template: Template) -> str:
 
 
 def _expand_friendship(template: Template) -> str:
-    """Expand {{Friendship|Character|Level}} to readable text.
-
-    Args:
-        template: A Friendship template node.
-
-    Returns:
-        e.g. 'friendship level 4 with Keroppi'
-    """
+    """Expand ``{{Friendship|Character|Level}}`` to readable text."""
     params = [str(p.value).strip() for p in template.params]
     if len(params) >= 2:
         return f"friendship level {params[1]} with {params[0]}"
@@ -105,30 +84,14 @@ def _expand_friendship(template: Template) -> str:
 
 
 def _expand_simple_param(template: Template) -> str:
-    """Expand templates that just wrap a single value like {{Rarity|Rare}}.
-
-    Args:
-        template: A single-param template node.
-
-    Returns:
-        The parameter value as plain text.
-    """
+    """Expand single-value templates like ``{{Rarity|Rare}}`` to the value."""
     if template.params:
         return str(template.params[0].value).strip()
     return ""
 
 
 def _expand_item_description(template: Template) -> str:
-    """Expand {{Item Description|col=N|Description text}}.
-
-    The description is usually the last positional parameter.
-
-    Args:
-        template: An Item Description template node.
-
-    Returns:
-        The description text.
-    """
+    """Expand ``{{Item Description|col=N|...}}`` to the last positional value."""
     for param in reversed(template.params):
         if not param.showkey:
             return str(param.value).strip()
@@ -163,17 +126,7 @@ def _expand_infobox(template: Template) -> str:
 
 
 def _clean_html_fragments(text: str) -> str:
-    """Replace common HTML leftovers from wiki table markup.
-
-    Wiki tables with <p> tags between recipe ingredients leave fragments
-    after strip_code(). This converts them to readable separators.
-
-    Args:
-        text: Text that may contain <p> tags or other HTML fragments.
-
-    Returns:
-        Cleaned text with HTML replaced by commas or spaces.
-    """
+    """Replace HTML leftovers from wiki table markup with commas/spaces."""
     text = re.sub(r"<p>", ", ", text)
     text = re.sub(r"</?[a-zA-Z][^>]*>", " ", text)
     text = re.sub(r"\s*,\s*,\s*", ", ", text)
@@ -201,23 +154,21 @@ def parse_wikitext(wikitext: str) -> str:
     return text.strip()
 
 
-def extract_sections(wikitext: str) -> list[dict]:  # type: ignore[type-arg]
-    """Parse wikitext into a list of heading-and-content section dicts.
+def extract_sections(wikitext: str) -> list[dict[str, Any]]:
+    """Parse wikitext into ordered ``{'heading', 'content'}`` section dicts.
 
-    Expands known templates before extracting sections so that section
-    content retains item names and game details.
+    'heading' is empty string for the introductory section before the
+    first heading.
 
     Args:
         wikitext: Raw wikitext string as returned by the MediaWiki API.
 
     Returns:
-        List of dicts with keys 'heading' (str) and 'content' (str), in
-        document order. 'heading' is empty string for the introductory
-        section before the first heading.
+        List of dicts with keys 'heading' (str) and 'content' (str).
     """
     parsed = mwparserfromhell.parse(wikitext)
     _expand_templates(parsed)
-    sections: list[dict] = []  # type: ignore[type-arg]
+    sections: list[dict[str, Any]] = []
     current_heading = ""
     current_parts: list[str] = []
 
@@ -239,17 +190,11 @@ def extract_sections(wikitext: str) -> list[dict]:  # type: ignore[type-arg]
 
 
 def _flush_section(
-    sections: list[dict],  # type: ignore[type-arg]
+    sections: list[dict[str, Any]],
     heading: str,
     parts: list[str],
 ) -> None:
-    """Append a completed section to the sections list if it has content.
-
-    Args:
-        sections: Accumulator list to append to.
-        heading: The section heading, or empty string for the intro section.
-        parts: Text fragments collected for this section.
-    """
+    """Append the completed section to the list if it has any content."""
     content = " ".join(parts).strip()
     if content:
         sections.append({"heading": heading, "content": content})

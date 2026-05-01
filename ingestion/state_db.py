@@ -11,7 +11,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TypedDict
+from typing import Any, TypedDict
 
 from config.settings import settings
 
@@ -28,9 +28,6 @@ CREATE TABLE IF NOT EXISTS page_ingestion_state (
 );
 """
 
-# Shared upsert statement for upsert_page (single row) and upsert_pages
-# (executemany). Hoisted so a change to the table contract only has one
-# place to edit.
 _UPSERT_SQL = """
 INSERT INTO page_ingestion_state
     (page_title, revision_id, status, embedding_model, updated_at)
@@ -59,10 +56,7 @@ class PageStateRow(TypedDict):
 
 
 def _connect() -> sqlite3.Connection:
-    """Open a connection to the SQLite state database, creating it if absent.
-
-    Ensures the parent directory and schema exist before returning.
-    """
+    """Open a SQLite connection, creating parent dir and schema if absent."""
     db_path = Path(settings.state_db_path)
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(db_path))
@@ -74,14 +68,7 @@ def _connect() -> sqlite3.Connection:
 
 @contextmanager
 def _connection() -> Iterator[sqlite3.Connection]:
-    """Context-managed SQLite connection that commits on success, rolls back
-    on exception, and always closes.
-
-    Wraps the existing ``with conn:`` protocol so read/write semantics are
-    unchanged. The outer ``finally`` guarantees ``conn.close()`` runs even
-    on Windows where file locks would otherwise block tempdir cleanup in
-    tests.
-    """
+    """SQLite connection that commits on success, rolls back on error, always closes."""
     conn = _connect()
     try:
         with conn:
@@ -91,7 +78,7 @@ def _connection() -> Iterator[sqlite3.Connection]:
 
 
 def _now_iso() -> str:
-    """Return the current UTC time as an ISO 8601 string."""
+    """Current UTC time as an ISO 8601 string."""
     return datetime.now(UTC).isoformat()
 
 
@@ -156,25 +143,8 @@ def upsert_pages(rows: list[PageStateRow]) -> None:
         conn.executemany(_UPSERT_SQL, params)
 
 
-def get_pages(titles: list[str]) -> dict[str, dict]:  # type: ignore[type-arg]
-    """Fetch state records for many pages in a single query.
-
-    Pre-batches what would otherwise be N round-trips through
-    ``get_page`` (each opening its own SQLite connection). Returns a
-    dict keyed by page_title for O(1) lookup at the call site. Titles
-    not present in the database are absent from the result, not
-    present-as-None — callers should use ``dict.get`` rather than
-    indexing.
-
-    Empty input short-circuits without opening a connection.
-
-    Args:
-        titles: List of wiki page titles to look up.
-
-    Returns:
-        Dict mapping page_title to its row dict for every title that
-        exists in the database. The dict is empty if no titles match.
-    """
+def get_pages(titles: list[str]) -> dict[str, dict[str, Any]]:
+    """Fetch state records for many pages in a single query, keyed by title."""
     if not titles:
         return {}
     placeholders = ",".join("?" * len(titles))
@@ -186,15 +156,8 @@ def get_pages(titles: list[str]) -> dict[str, dict]:  # type: ignore[type-arg]
     return {row["page_title"]: dict(row) for row in rows}
 
 
-def get_page(page_title: str) -> dict | None:  # type: ignore[type-arg]
-    """Fetch the state record for a single page.
-
-    Args:
-        page_title: The wiki page title to look up.
-
-    Returns:
-        A dict with keys matching the table columns, or None if not found.
-    """
+def get_page(page_title: str) -> dict[str, Any] | None:
+    """Fetch the state record for a single page, or None if not found."""
     with _connection() as conn:
         row = conn.execute(
             "SELECT * FROM page_ingestion_state WHERE page_title = ?",
@@ -203,15 +166,8 @@ def get_page(page_title: str) -> dict | None:  # type: ignore[type-arg]
     return dict(row) if row else None
 
 
-def get_pages_by_status(status: str) -> list[dict]:  # type: ignore[type-arg]
-    """Return all pages with the given status.
-
-    Args:
-        status: One of 'pending', 'in_progress', or 'complete'.
-
-    Returns:
-        List of row dicts ordered by page_title.
-    """
+def get_pages_by_status(status: str) -> list[dict[str, Any]]:
+    """Return all pages with the given status, ordered by page_title."""
     with _connection() as conn:
         rows = conn.execute(
             "SELECT * FROM page_ingestion_state WHERE status = ? ORDER BY page_title",
@@ -220,19 +176,8 @@ def get_pages_by_status(status: str) -> list[dict]:  # type: ignore[type-arg]
     return [dict(row) for row in rows]
 
 
-def get_pages_with_stale_embedding_model(current_model: str) -> list[dict]:  # type: ignore[type-arg]
-    """Return all pages whose stored embedding model differs from the current one.
-
-    Used by the startup sync check to identify pages that were ingested with
-    a different model and therefore need re-ingestion.
-
-    Args:
-        current_model: The formatted model identifier currently configured,
-            e.g. "nomic-embed-text:v1.5".
-
-    Returns:
-        List of row dicts for pages where embedding_model != current_model.
-    """
+def get_pages_with_stale_embedding_model(current_model: str) -> list[dict[str, Any]]:
+    """Return all pages whose stored embedding_model differs from current_model."""
     with _connection() as conn:
         rows = conn.execute(
             """
@@ -243,48 +188,6 @@ def get_pages_with_stale_embedding_model(current_model: str) -> list[dict]:  # t
             (current_model,),
         ).fetchall()
     return [dict(row) for row in rows]
-
-
-def mark_complete(page_title: str) -> None:
-    """Record successful processing of a page in the state database.
-
-    Sets status to 'complete' and records the current timestamp. Safe to
-    call multiple times — subsequent calls are no-ops if the page is
-    already complete.
-
-    Args:
-        page_title: The wiki page title to mark complete.
-    """
-    with _connection() as conn:
-        conn.execute(
-            """
-            UPDATE page_ingestion_state
-            SET status = 'complete', updated_at = ?
-            WHERE page_title = ?
-            """,
-            (_now_iso(), page_title),
-        )
-
-
-def mark_pending(page_title: str, revision_id: int) -> None:
-    """Reset a page to pending status, updating the revision ID.
-
-    Used when a page is detected as new or updated during incremental
-    ingestion, or when an embedding model change requires re-ingestion.
-
-    Args:
-        page_title: The wiki page title to reset.
-        revision_id: The new revision ID from the MediaWiki API.
-    """
-    with _connection() as conn:
-        conn.execute(
-            """
-            UPDATE page_ingestion_state
-            SET status = 'pending', revision_id = ?, updated_at = ?
-            WHERE page_title = ?
-            """,
-            (revision_id, _now_iso(), page_title),
-        )
 
 
 def get_status_summary() -> str:

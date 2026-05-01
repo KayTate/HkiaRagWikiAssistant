@@ -34,19 +34,7 @@ _retrieval_logger = logging.getLogger("retrieval")
 
 
 def _log_event(event: str, state: AgentState, **fields: Any) -> None:
-    """Emit one JSON-encoded retrieval observability event.
-
-    Gated by settings.retrieval_log_enabled. Each event carries a
-    millisecond-precision UTC timestamp, the per-question trace_id, and
-    the current iteration count so events from a single run can be
-    reassembled with `jq` or grep.
-
-    Args:
-        event: Short event name — one of query_received, retrieve,
-            llm_call, extract_decision, synthesize.
-        state: Current agent state, used for trace_id and iter.
-        **fields: Event-specific payload fields.
-    """
+    """Emit one JSON-encoded retrieval observability event."""
     if not settings.retrieval_log_enabled:
         return
     payload: dict[str, Any] = {
@@ -62,7 +50,7 @@ def _log_event(event: str, state: AgentState, **fields: Any) -> None:
 
 
 def _serialize_chunk(chunk: dict[str, Any]) -> dict[str, Any]:
-    """Flatten a retrieved chunk into a JSON-serialisable log record."""
+    """Flatten a chunk into a JSON-serialisable log record."""
     metadata = dict(chunk.get("metadata") or {})
     source_title = metadata.get("source_title", "")
     chunk_index = metadata.get("chunk_index", 0)
@@ -122,32 +110,13 @@ def _call_llm_and_log(
     return response
 
 
-# ---------------------------------------------------------------------------
-# Context formatting helpers
-# ---------------------------------------------------------------------------
-
-
 def _format_chunks(chunks: list[dict[str, Any]]) -> str:
-    """Render a list of retrieved chunks into a plain text block for the LLM.
-
-    Args:
-        chunks: Dicts with at least a 'text' key.
-
-    Returns:
-        Newline-separated text block.
-    """
+    """Render a list of retrieved chunks into a plain text block for the LLM."""
     return "\n\n".join(c.get("text", "") for c in chunks if c.get("text"))
 
 
 def _build_context_block(state: AgentState) -> str:
-    """Assemble all retrieved context into a single block for synthesis.
-
-    Args:
-        state: Current agent state containing all accumulated chunks.
-
-    Returns:
-        Formatted string with entity headers and their associated chunks.
-    """
+    """Assemble all retrieved context into a single block for synthesis."""
     lines: list[str] = []
     for entity, chunks in state.resolved_entities.items():
         lines.append(f"=== {entity} ===")
@@ -156,11 +125,6 @@ def _build_context_block(state: AgentState) -> str:
         lines.append("=== Additional Context ===")
         lines.append(_format_chunks(state.retrieved_context))
     return "\n\n".join(lines)
-
-
-# ---------------------------------------------------------------------------
-# Node implementations
-# ---------------------------------------------------------------------------
 
 
 def route_question(state: AgentState) -> AgentState:
@@ -196,16 +160,6 @@ def retrieve(state: AgentState) -> AgentState:
     Skips entities already in visited to prevent infinite loops on circular
     prerequisite chains.
 
-    iteration_count is incremented unconditionally at the top of this
-    function — before the visited-skip check — on purpose. The cap is a
-    hard ceiling on graph walks, not a measure of "useful work". When
-    extract repeatedly fails to parse JSON, _handle_parse_failure flips
-    needs_more_retrieval back to True after every retrieve, so the
-    visited-skip path alone cannot break the loop; only the iteration
-    cap can. Counting visited-skips against the cap costs at most a
-    handful of fast iterations in pathological cases, which is the
-    correct tradeoff for guaranteed termination.
-
     Args:
         state: Agent state with current_entity and visited populated.
 
@@ -213,6 +167,7 @@ def retrieve(state: AgentState) -> AgentState:
         Updated state with new chunks appended to retrieved_context and
         resolved_entities, and current_entity added to visited.
     """
+    # See _route_after_check for why this runs unconditionally.
     state.iteration_count += 1
 
     entity = state.current_entity
@@ -371,15 +326,7 @@ def _extract_with_retry(
 
 
 def _apply_extract_result(data: dict[str, Any], state: AgentState) -> AgentState:
-    """Update agent state from a successfully parsed extract response.
-
-    Args:
-        data: Parsed JSON dict from the extract LLM.
-        state: Current agent state to update.
-
-    Returns:
-        Updated agent state.
-    """
+    """Update agent state from a successfully parsed extract response."""
     prerequisites: list[str] = data.get("prerequisites", [])
     for prereq in prerequisites:
         if prereq not in state.prerequisite_chain:
@@ -401,24 +348,8 @@ def _apply_extract_result(data: dict[str, Any], state: AgentState) -> AgentState
 
 
 def _handle_parse_failure(state: AgentState) -> AgentState:
-    """Fallback when all JSON parse retries are exhausted.
-
-    Prefer continuing retrieval over returning an incomplete answer.
-    Setting needs_more_retrieval=True without changing current_entity
-    means the next retrieve will hit the visited-skip path, which by
-    itself cannot terminate the loop because this function will run
-    again on the next iteration and flip the flag back. Termination
-    relies on retrieve incrementing iteration_count unconditionally
-    (including on visited-skips) so that _route_after_check's
-    iteration-limit branch eventually fires. See the matching note on
-    retrieve and _route_after_check.
-
-    Args:
-        state: Current agent state.
-
-    Returns:
-        State with needs_more_retrieval set to True.
-    """
+    """Fallback when all JSON parse retries are exhausted."""
+    # See _route_after_check for why this runs unconditionally.
     logger.error(
         "extract_info: falling back to needs_more_retrieval=True after "
         "exhausting JSON parse retries."
@@ -428,17 +359,7 @@ def _handle_parse_failure(state: AgentState) -> AgentState:
 
 
 def check_complete(state: AgentState) -> AgentState:
-    """Evaluate whether the agent should continue, synthesize, or hit the limit.
-
-    This node does not modify state — it exists as a named checkpoint so
-    the conditional edge routing logic has a clean place to branch.
-
-    Args:
-        state: Current agent state.
-
-    Returns:
-        State unchanged; routing is handled by graph conditional edges.
-    """
+    """Named checkpoint node so conditional edges have a clean place to branch."""
     return state
 
 

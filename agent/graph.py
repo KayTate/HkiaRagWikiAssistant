@@ -24,11 +24,7 @@ from config.settings import settings
 
 
 def _enable_mlflow_autolog() -> None:
-    """Enable MLflow LangChain autolog for agent tracing.
-
-    Called lazily at compile time rather than import time so that tests
-    can patch mlflow before this runs and avoid side effects during import.
-    """
+    """Enable MLflow LangChain autolog (lazy, so tests can patch first)."""
     mlflow.langchain.autolog(
         log_traces=True,
     )
@@ -64,14 +60,7 @@ def _route_after_check(state: AgentState) -> str:
 
 
 def build_graph() -> StateGraph:  # type: ignore[type-arg]
-    """Construct the HKIA agent state graph without compiling it.
-
-    Separating construction from compilation allows tests to inspect
-    graph structure without invoking the full compile step.
-
-    Returns:
-        Uncompiled StateGraph instance.
-    """
+    """Construct the HKIA agent state graph without compiling it."""
     graph: StateGraph = StateGraph(AgentState)  # type: ignore[type-arg]
 
     graph.add_node("router", route_question)
@@ -101,15 +90,6 @@ def build_graph() -> StateGraph:  # type: ignore[type-arg]
 
 
 def compile_graph() -> Any:  # LangGraph compiled graph type is internal/untyped
-    """Build and compile the HKIA agent graph, ready for invocation.
-
-    Enables MLflow autologging before compiling so traces are captured
-    for every subsequent invocation.
-
-    Returns:
-        Compiled LangGraph runnable. Typed as Any because the compiled
-        graph type is an internal LangGraph implementation detail that
-        varies across versions and is not exposed in the public API.
-    """
+    """Build and compile the HKIA agent graph, ready for invocation."""
     _enable_mlflow_autolog()
     return build_graph().compile()

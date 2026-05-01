@@ -76,8 +76,6 @@ def setup_logging(
 
     _configured = True
 
-    # Retrieval logger is configured alongside the root logger so every
-    # entry point gets JSONL observability for free.
     setup_retrieval_logger()
 
 

@@ -1,18 +1,6 @@
-"""LLM provider clients for the HKIA agent.
-
-Dispatches chat completions to the configured provider (Ollama, OpenAI,
-or Anthropic) and wraps each call in a tenacity retry decorator tuned
-to the provider's failure characteristics. The dispatcher (``_call_llm``)
-is the single entry point used by ``agent.nodes`` — node code should not
-talk to a specific provider directly.
-
-The constants and functions keep their leading-underscore prefix because
-they are package-internal: consumed only by ``agent.nodes`` (via
-``_call_llm_and_log``) and not part of any public API. Tests patch
-``agent.nodes._call_llm`` rather than ``agent.llm._call_llm`` because
-nodes.py imports the function and that is the binding the production
-call sites resolve.
-"""
+"""LLM provider clients for the HKIA agent. ``_call_llm`` dispatches to
+Ollama / OpenAI / Anthropic; each provider call is wrapped in a tenacity
+retry tuned to its failure characteristics."""
 
 import logging
 from typing import Any
@@ -117,14 +105,6 @@ def _call_ollama_with_retry(system_prompt: str, user_message: str) -> str:
         ],
         "stream": False,
     }
-    # Ollama runs locally; a healthy small/medium-model completion
-    # finishes in seconds. The 5-minute hard-coded timeout this replaces
-    # used to mean a single hung process could stall the agent for ~150
-    # minutes across the iteration × parse-retry budget. The setting
-    # default (180s) covers the longest legitimate small-model
-    # generation while bounding worst-case stall time; users running
-    # large local models (70B and up) can raise it via
-    # OLLAMA_REQUEST_TIMEOUT_SECONDS without touching code.
     try:
         response = requests.post(
             url, json=payload, timeout=settings.ollama_request_timeout_seconds

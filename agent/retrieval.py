@@ -1,22 +1,6 @@
-"""Entity → chunks resolution for the HKIA agent.
-
-Given a normalized entity name (or, as a fallback, a free-text user
-question), produces the list of vector-store chunks that the
-LLM-driven nodes will reason over. Resolution order is title variants
-first, then opensearch, then semantic search — wrapped in a single
-RETRIEVER MLflow span so the trace records exactly the chunks the LLM
-will see.
-
-Constants and functions keep their leading-underscore prefix because
-they are package-internal — consumed by ``agent.nodes``'s ``retrieve``
-and ``_fetch_entity_chunks`` callers, and not part of any public API.
-
-Tests that previously patched ``agent.nodes.vs_get_page_by_title``,
-``agent.nodes.vs_semantic_search``, ``agent.nodes.embed_chunks``, or
-``agent.nodes._resolve_title_via_opensearch`` must now patch the
-``agent.retrieval`` binding — Python rebinds names per module, and
-those names live here after this extraction.
-"""
+"""Entity → chunks resolution for the HKIA agent. Resolution order is title
+variants, then opensearch, then semantic search — wrapped in a single
+RETRIEVER MLflow span so the trace records exactly what the LLM sees."""
 
 import logging
 import re
@@ -54,21 +38,7 @@ _TITLE_VARIANT_SUFFIXES: tuple[str, ...] = (
 
 
 def _chunks_to_documents(chunks: list[dict[str, Any]]) -> list[Document]:
-    """Convert agent chunk dicts to MLflow Document entities for span outputs.
-
-    The agent uses ``{"text": ..., "metadata": ...}`` internally, but
-    MLflow's RetrievalGroundedness scorer reads RETRIEVER spans by
-    looking for documents with ``page_content``. This helper bridges the
-    two formats at the span boundary so traces are scorable without
-    changing the chunk shape that downstream nodes consume.
-
-    Args:
-        chunks: Retrieved chunk dicts as produced by vectorstore.client.
-
-    Returns:
-        List of Document entities with page_content sourced from each
-        chunk's 'text' field and metadata copied through unchanged.
-    """
+    """Convert chunk dicts to MLflow Documents at the RETRIEVER span boundary."""
     return [
         Document(
             page_content=str(c.get("text", "")),
@@ -79,20 +49,7 @@ def _chunks_to_documents(chunks: list[dict[str, Any]]) -> list[Document]:
 
 
 def _title_candidates(entity: str) -> list[str]:
-    """Return plausible wiki titles for an extracted entity.
-
-    Tries the entity as-is, with a leading 'The ' prefix (for pages where
-    the article is part of the canonical title — e.g. 'The Mystery Tree'),
-    and each form combined with common disambiguation suffixes.
-    Ordered most-likely-match first.
-
-    Args:
-        entity: Normalized entity name.
-
-    Returns:
-        List of candidate wiki page titles to try in order.
-        Empty list if entity is empty.
-    """
+    """Return plausible wiki titles for an entity, most-likely-match first."""
     cleaned = entity.strip()
     if not cleaned:
         return []
