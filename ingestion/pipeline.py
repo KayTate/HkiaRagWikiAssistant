@@ -107,20 +107,26 @@ def _mark_all_pages_pending(
     """Mark every page as pending using pre-fetched revision IDs.
 
     Used by full ingestion to queue all pages for re-ingestion. Revision
-    IDs come from the batch API call, avoiding per-page lookups.
+    IDs come from the batch API call, avoiding per-page lookups. Writes
+    the whole batch in a single SQLite transaction via
+    ``state_db.upsert_pages`` — for a wiki with thousands of pages this
+    avoids opening that many connections.
 
     Args:
         pages: List of dicts with 'title' (str) and 'revision_id' (int)
             from get_all_pages_with_revision_ids().
     """
     current_model = _current_embedding_model()
-    for page in pages:
-        state_db.upsert_page(
-            page_title=str(page["title"]),
-            revision_id=int(page["revision_id"]),
-            status="pending",
-            embedding_model=current_model,
-        )
+    rows: list[state_db.PageStateRow] = [
+        {
+            "page_title": str(page["title"]),
+            "revision_id": int(page["revision_id"]),
+            "status": "pending",
+            "embedding_model": current_model,
+        }
+        for page in pages
+    ]
+    state_db.upsert_pages(rows)
 
 
 def _mark_changed_pages_pending(
@@ -129,25 +135,35 @@ def _mark_changed_pages_pending(
     """Identify new or updated pages and mark them pending for re-ingestion.
 
     Pages not yet in the state database are inserted as pending. Pages
-    whose revision ID has changed since last ingestion are reset to pending.
-    Complete pages with unchanged revisions are left untouched.
+    whose revision ID has changed since last ingestion are reset to
+    pending. Complete pages with unchanged revisions are left untouched.
+
+    Uses one ``state_db.get_pages`` call (single SELECT with WHERE
+    page_title IN (...)) plus one ``state_db.upsert_pages`` call for
+    the changed subset, replacing N+M per-row connection round-trips.
 
     Args:
         pages: List of dicts with 'title' (str) and 'revision_id' (int)
             from get_all_pages_with_revision_ids().
     """
     current_model = _current_embedding_model()
+    titles = [str(p["title"]) for p in pages]
+    existing_by_title = state_db.get_pages(titles)
+    rows: list[state_db.PageStateRow] = []
     for page in pages:
         title = str(page["title"])
         revision_id = int(page["revision_id"])
-        existing = state_db.get_page(title)
-        if existing is None or existing["revision_id"] != revision_id:
-            state_db.upsert_page(
-                page_title=title,
-                revision_id=revision_id,
-                status="pending",
-                embedding_model=current_model,
+        existing_row = existing_by_title.get(title)
+        if existing_row is None or existing_row["revision_id"] != revision_id:
+            rows.append(
+                {
+                    "page_title": title,
+                    "revision_id": revision_id,
+                    "status": "pending",
+                    "embedding_model": current_model,
+                }
             )
+    state_db.upsert_pages(rows)
 
 
 _WIKITEXT_BATCH_SIZE = 20

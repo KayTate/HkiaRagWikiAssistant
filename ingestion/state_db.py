@@ -11,6 +11,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TypedDict
 
 from config.settings import settings
 
@@ -26,6 +27,35 @@ CREATE TABLE IF NOT EXISTS page_ingestion_state (
     updated_at      TEXT NOT NULL
 );
 """
+
+# Shared upsert statement for upsert_page (single row) and upsert_pages
+# (executemany). Hoisted so a change to the table contract only has one
+# place to edit.
+_UPSERT_SQL = """
+INSERT INTO page_ingestion_state
+    (page_title, revision_id, status, embedding_model, updated_at)
+VALUES (?, ?, ?, ?, ?)
+ON CONFLICT(page_title) DO UPDATE SET
+    revision_id = excluded.revision_id,
+    status = excluded.status,
+    embedding_model = excluded.embedding_model,
+    updated_at = excluded.updated_at
+"""
+
+
+class PageStateRow(TypedDict):
+    """Shape of one input row to upsert_pages.
+
+    Mirrors the four required keyword arguments of upsert_page so a
+    caller migrating from per-row to bulk can map field-for-field.
+    Status is left as ``str`` rather than a Literal because the table
+    CHECK constraint already enforces the allowed set at write time.
+    """
+
+    page_title: str
+    revision_id: int
+    status: str
+    embedding_model: str
 
 
 def _connect() -> sqlite3.Connection:
@@ -74,7 +104,9 @@ def upsert_page(
     """Insert or update a page record with the given status and model.
 
     Safe to call multiple times — subsequent calls overwrite the existing
-    row for that page_title.
+    row for that page_title. Prefer ``upsert_pages`` when writing more
+    than a handful of rows; this single-row entry point opens a fresh
+    SQLite connection per call.
 
     Args:
         page_title: The wiki page title (primary key).
@@ -84,18 +116,74 @@ def upsert_page(
     """
     with _connection() as conn:
         conn.execute(
-            """
-            INSERT INTO page_ingestion_state
-                (page_title, revision_id, status, embedding_model, updated_at)
-            VALUES (?, ?, ?, ?, ?)
-            ON CONFLICT(page_title) DO UPDATE SET
-                revision_id = excluded.revision_id,
-                status = excluded.status,
-                embedding_model = excluded.embedding_model,
-                updated_at = excluded.updated_at
-            """,
+            _UPSERT_SQL,
             (page_title, revision_id, status, embedding_model, _now_iso()),
         )
+
+
+def upsert_pages(rows: list[PageStateRow]) -> None:
+    """Insert or update many page records in a single transaction.
+
+    Roughly N times faster than calling ``upsert_page`` in a loop for
+    large batches: one SQLite connection setup + one ``executemany``
+    instead of N of each. The whole batch is wrapped in the connection
+    context manager's transaction, so a constraint violation rolls
+    every row back — acceptable for the mark-pending callers because
+    they always write status='pending' and the only constraint is the
+    PRIMARY KEY (handled by ON CONFLICT). Empty input is a no-op and
+    does not open a connection.
+
+    Args:
+        rows: List of page records. Each must have page_title,
+            revision_id, status, and embedding_model. All rows share
+            the same ``updated_at`` timestamp because they are
+            conceptually one operation.
+    """
+    if not rows:
+        return
+    now = _now_iso()
+    params = [
+        (
+            row["page_title"],
+            row["revision_id"],
+            row["status"],
+            row["embedding_model"],
+            now,
+        )
+        for row in rows
+    ]
+    with _connection() as conn:
+        conn.executemany(_UPSERT_SQL, params)
+
+
+def get_pages(titles: list[str]) -> dict[str, dict]:  # type: ignore[type-arg]
+    """Fetch state records for many pages in a single query.
+
+    Pre-batches what would otherwise be N round-trips through
+    ``get_page`` (each opening its own SQLite connection). Returns a
+    dict keyed by page_title for O(1) lookup at the call site. Titles
+    not present in the database are absent from the result, not
+    present-as-None — callers should use ``dict.get`` rather than
+    indexing.
+
+    Empty input short-circuits without opening a connection.
+
+    Args:
+        titles: List of wiki page titles to look up.
+
+    Returns:
+        Dict mapping page_title to its row dict for every title that
+        exists in the database. The dict is empty if no titles match.
+    """
+    if not titles:
+        return {}
+    placeholders = ",".join("?" * len(titles))
+    sql = (
+        f"SELECT * FROM page_ingestion_state WHERE page_title IN ({placeholders})"
+    )
+    with _connection() as conn:
+        rows = conn.execute(sql, titles).fetchall()
+    return {row["page_title"]: dict(row) for row in rows}
 
 
 def get_page(page_title: str) -> dict | None:  # type: ignore[type-arg]
