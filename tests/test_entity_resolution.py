@@ -185,6 +185,56 @@ def test_fetch_entity_chunks_follows_redirect_from_opensearch(mocker: Any) -> No
     assert result == final_chunks
 
 
+def test_fetch_entity_chunks_follows_redirect_from_direct_title(mocker: Any) -> None:
+    """A title-variant hit that resolves to a redirect must follow it.
+
+    Complements ``test_fetch_entity_chunks_follows_redirect_from_opensearch``
+    above. That test exercised the redirect-follow path that fires
+    AFTER opensearch resolution; this one exercises the same redirect
+    handling on the direct ``_title_candidates`` path. Without
+    coverage here, a refactor that moved the redirect-follow into the
+    opensearch branch only would silently regress the much more
+    common "exact title is a redirect page" case.
+    """
+    redirect_chunks: list[dict[str, Any]] = [
+        {
+            "text": "REDIRECT Woodblock",
+            "metadata": {"source_title": "Wooden Block", "chunk_index": 0},
+        }
+    ]
+    final_chunks: list[dict[str, Any]] = [
+        {
+            "text": "Woodblock is a crafting material.",
+            "metadata": {"source_title": "Woodblock", "chunk_index": 0},
+        }
+    ]
+
+    def fake_get_page(title: str) -> list[dict[str, Any]]:
+        if title == "Wooden Block":
+            return redirect_chunks
+        if title == "Woodblock":
+            return final_chunks
+        return []
+
+    mocker.patch("agent.retrieval.vs_get_page_by_title", side_effect=fake_get_page)
+    opensearch_mock = mocker.patch(
+        "agent.retrieval._resolve_title_via_opensearch", return_value=None
+    )
+    embed_mock = mocker.patch("agent.retrieval.embed_chunks")
+    search_mock = mocker.patch("agent.retrieval.vs_semantic_search")
+
+    # Pass the entity exactly as the redirect title so the first
+    # _title_candidates entry hits the redirect page.
+    result = _fetch_entity_chunks("Wooden Block", "what is a wooden block?")
+
+    assert result == final_chunks
+    # Redirect was resolved at the title-variant stage — opensearch
+    # and semantic search must not have been consulted.
+    opensearch_mock.assert_not_called()
+    embed_mock.assert_not_called()
+    search_mock.assert_not_called()
+
+
 def test_opensearch_failure_does_not_raise(mocker: Any) -> None:
     """Raising from opensearch_title must not propagate; semantic fallback runs."""
     mocker.patch("agent.retrieval.vs_get_page_by_title", return_value=[])

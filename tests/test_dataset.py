@@ -92,3 +92,24 @@ def test_load_dataset_raises_for_non_string_expected_response(
     path = _write_dataset(tmp_path, data)
     with pytest.raises(ValueError, match="'expected_response' must be a str"):
         load_dataset(str(path))
+
+
+def test_load_dataset_raises_for_non_dict_metadata(tmp_path: pathlib.Path) -> None:
+    """load_dataset raises ValueError when metadata is not a dict.
+
+    Closes the only validator branch that wasn't exercised. The runner
+    later does ``entry.get("metadata", {}).get("question_type", ...)``;
+    a list-typed metadata would slip past load_dataset and AttributeError
+    deep inside the eval pipeline. Surfacing the type mismatch at load
+    time keeps the failure local and actionable.
+    """
+    data = [
+        {
+            "inputs": {"question": "q"},
+            "expected_response": "answer",
+            "metadata": ["not", "a", "dict"],
+        }
+    ]
+    path = _write_dataset(tmp_path, data)
+    with pytest.raises(ValueError, match="'metadata' must be a dict"):
+        load_dataset(str(path))
