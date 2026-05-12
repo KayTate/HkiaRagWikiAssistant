@@ -133,6 +133,95 @@ def test_parse_wikitext_strips_unknown_template_silently() -> None:
     assert "after" in out
 
 
+def test_parse_wikitext_separates_wiki_table_cells() -> None:
+    """Wikitable {| ... |} cells must be split, not concatenated end-to-end.
+
+    strip_code drops |/||/!/|- delimiters without inserting whitespace.
+    Without the cell-break sentinel, every table on the wiki produces
+    one continuous string of glued-together cell contents.
+    """
+    wikitext = "{| class=\"wikitable\"\n| A || B\n|-\n| C || D\n|}"
+    out = parse_wikitext(wikitext)
+    assert "AB" not in out
+    assert "CD" not in out
+    for cell in ("A", "B", "C", "D"):
+        assert cell in out
+
+
+def test_parse_wikitext_separates_html_table_cells() -> None:
+    """HTML <table>/<td> cells must be split too — same root cause as wiki tables.
+
+    mwparserfromhell parses both syntaxes into td/th Tag nodes, so the
+    same fix covers both. Pin this to prevent a regression that special-
+    cases only one syntax flavor.
+    """
+    out = parse_wikitext("<table><tr><td>A</td><td>B</td></tr></table>")
+    assert "AB" not in out
+    assert "A" in out and "B" in out
+
+
+def test_parse_wikitext_does_not_glue_companion_ability_to_next_character() -> None:
+    """Repro for the eval failure on "When do I unlock the Slow & Steady ability?".
+
+    Without the cell-break fix, "Slow & Steady" (last bullet of
+    Pompompurin's cell) concatenates with "Retsuko" (first text of the
+    next cell), causing the LLM to attribute the ability to the wrong
+    character at the wrong friendship level.
+    """
+    wikitext = (
+        "{| class=\"wikitable\"\n"
+        "|-\n"
+        "|Pompompurin (5)\n"
+        "*Pudding Pants\n"
+        "*Slow & Steady\n"
+        "|Retsuko (16)\n"
+        "*Hot Stuff\n"
+        "*Adrenaline\n"
+        "|}"
+    )
+    out = parse_wikitext(wikitext)
+    assert "SteadyRetsuko" not in out
+    assert "Slow & Steady" in out
+    assert "Retsuko" in out
+
+
+def test_parse_wikitext_does_not_glue_friendship_xp_to_next_row() -> None:
+    """Repro for the eval failure on Kuromi friendship level 15 rewards.
+
+    Without the cell-break fix, level-14's XP value (1512) runs straight
+    into level-15's row number (15), producing "...15121515..." in the
+    chunk. The LLM then mis-assigns level-15 rewards.
+    """
+    wikitext = (
+        "{| class=\"wikitable\"\n"
+        "|-\n"
+        "|14\n"
+        "|Recipe unlock\n"
+        "|1512\n"
+        "|-\n"
+        "|15\n"
+        "|Cauldron blueprints unlocked\n"
+        "|1967\n"
+        "|}"
+    )
+    out = parse_wikitext(wikitext)
+    assert "151215" not in out
+    assert "Cauldron blueprints unlocked" in out
+
+
+def test_parse_wikitext_drops_file_thumbnail_debris() -> None:
+    """[[File:Foo.png|45x45px]] markup must not leak its size/alt args into chunks.
+
+    Friendship-reward tables are full of icon thumbnails; without
+    filtering them, every chunk gets sprayed with "45x45px"-style debris
+    that crowds out the actual game data.
+    """
+    out = parse_wikitext("[[File:Foo.png|45x45px]] Apple")
+    assert "45x45px" not in out
+    assert "Foo.png" not in out
+    assert "Apple" in out
+
+
 # ---------------------------------------------------------------------------
 # extract_sections
 # ---------------------------------------------------------------------------
@@ -192,3 +281,21 @@ def test_extract_sections_drops_empty_sections() -> None:
     headings = [s["heading"] for s in sections]
     assert "Empty" not in headings
     assert "Has Content" in headings
+
+
+def test_extract_sections_separates_table_cells_within_section() -> None:
+    """Cell-break fix must reach extract_sections too, not just parse_wikitext.
+
+    Both flow into the chunker; if only parse_wikitext got fixed,
+    section-strategy chunks would still glue cells together and the
+    friendship-rewards-table bug would resurface for that strategy.
+    """
+    wikitext = "==Recipe==\n{| class=\"wikitable\"\n| Apple || Wood\n|}"
+    sections = extract_sections(wikitext)
+
+    by_heading = {s["heading"]: s["content"] for s in sections}
+    assert "Recipe" in by_heading
+    content = by_heading["Recipe"]
+    assert "AppleWood" not in content
+    assert "Apple" in content
+    assert "Wood" in content

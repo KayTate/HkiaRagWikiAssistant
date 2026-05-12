@@ -131,25 +131,48 @@ def _clean_html_fragments(text: str) -> str:
     text = re.sub(r"</?[a-zA-Z][^>]*>", " ", text)
     text = re.sub(r"\s*,\s*,\s*", ", ", text)
     text = re.sub(r"  +", " ", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()
 
 
-def parse_wikitext(wikitext: str) -> str:
-    """Convert raw wikitext to clean plain text for embedding.
+# Non-whitespace sentinel survives strip_code(collapse=True); a raw \n does not.
+_CELL_BREAK = "@@HKIA_CELL@@"
 
-    Expands known templates to preserve item names and game details,
-    then strips remaining markup via mwparserfromhell. Cleans up any
-    leftover HTML fragments from wiki tables.
 
-    Args:
-        wikitext: Raw wikitext string as returned by the MediaWiki API.
+def _strip_with_cell_breaks(parsed: Wikicode) -> str:
+    """Strip wikicode but preserve <td>/<th> cell boundaries as newlines.
 
-    Returns:
-        Clean plain text with meaningful content preserved.
+    Without this, adjacent table cells collapse into one string and
+    downstream LLMs cannot tell where one row's data ends and the next
+    begins (e.g. companion abilities glue to the wrong character).
     """
+    for tag in parsed.filter_tags(recursive=True):
+        if tag.tag in ("td", "th"):
+            tag.contents.insert(0, _CELL_BREAK)
+    text = parsed.strip_code(normalize=True, collapse=True)
+    return text.replace(_CELL_BREAK, "\n")
+
+
+def _drop_file_wikilinks(parsed: Wikicode) -> None:
+    """Drop [[File:...]]/[[Image:...]] links so thumbnail debris stays out of chunks."""
+    for link in parsed.filter_wikilinks():
+        title = str(link.title).strip().lower()
+        if title.startswith(("file:", "image:")):
+            try:
+                parsed.remove(link)
+            except ValueError as exc:
+                # Mirrors the benign-already-removed case in _expand_templates.
+                logger.debug(
+                    "Wikilink '%s' already removed; skipping: %s", link.title, exc
+                )
+
+
+def parse_wikitext(wikitext: str) -> str:
+    """Convert raw wikitext to clean plain text for embedding."""
     parsed = mwparserfromhell.parse(wikitext)
     _expand_templates(parsed)
-    text = parsed.strip_code(normalize=True, collapse=True)
+    _drop_file_wikilinks(parsed)
+    text = _strip_with_cell_breaks(parsed)
     text = _clean_html_fragments(text)
     return text.strip()
 
@@ -159,15 +182,10 @@ def extract_sections(wikitext: str) -> list[dict[str, Any]]:
 
     'heading' is empty string for the introductory section before the
     first heading.
-
-    Args:
-        wikitext: Raw wikitext string as returned by the MediaWiki API.
-
-    Returns:
-        List of dicts with keys 'heading' (str) and 'content' (str).
     """
     parsed = mwparserfromhell.parse(wikitext)
     _expand_templates(parsed)
+    _drop_file_wikilinks(parsed)
     sections: list[dict[str, Any]] = []
     current_heading = ""
     current_parts: list[str] = []
@@ -178,9 +196,8 @@ def extract_sections(wikitext: str) -> list[dict[str, Any]]:
             current_heading = node.title.strip_code().strip()
             current_parts = []
         else:
-            text = mwparserfromhell.parse(str(node)).strip_code(
-                normalize=True, collapse=True
-            )
+            node_parsed = mwparserfromhell.parse(str(node))
+            text = _strip_with_cell_breaks(node_parsed)
             text = _clean_html_fragments(text)
             if text.strip():
                 current_parts.append(text)
