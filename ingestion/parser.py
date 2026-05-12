@@ -53,13 +53,15 @@ def _template_to_text(name: str, template: Template) -> str | None:
         return _expand_icon_link(template)
     if name == "friendship":
         return _expand_friendship(template)
+    if name == "relationship":
+        return _expand_relationship(template)
     if name == "rarity":
         return _expand_simple_param(template)
     if name == "tag":
         return _expand_simple_param(template)
     if name == "item description":
         return _expand_item_description(template)
-    if name == "infobox item":
+    if name.startswith("infobox "):
         return _expand_infobox(template)
     return None
 
@@ -83,6 +85,16 @@ def _expand_friendship(template: Template) -> str:
     return ""
 
 
+def _expand_relationship(template: Template) -> str:
+    """Expand ``{{Relationship|Name|role}}`` to ``Name (role)``."""
+    params = [str(p.value).strip() for p in template.params]
+    if len(params) >= 2:
+        return f"{params[0]} ({params[1]})"
+    if params:
+        return params[0]
+    return ""
+
+
 def _expand_simple_param(template: Template) -> str:
     """Expand single-value templates like ``{{Rarity|Rare}}`` to the value."""
     if template.params:
@@ -99,18 +111,7 @@ def _expand_item_description(template: Template) -> str:
 
 
 def _expand_infobox(template: Template) -> str:
-    """Expand {{Infobox Item|...}} to key-value lines.
-
-    Extracts the most useful fields from infobox templates and formats
-    them as readable text. Template values that themselves contain
-    templates (like Icon/Link) are recursively expanded.
-
-    Args:
-        template: An Infobox Item template node.
-
-    Returns:
-        Multi-line plain text summary of the infobox fields.
-    """
+    """Expand any ``{{Infobox ...}}`` to Key: Value lines, recursively."""
     lines: list[str] = []
     for param in template.params:
         key = str(param.name).strip().lower()

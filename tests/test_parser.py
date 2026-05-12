@@ -109,6 +109,68 @@ def test_parse_wikitext_recursively_expands_templates_inside_infobox() -> None:
     assert "{{" not in out
 
 
+def test_parse_wikitext_expands_non_item_infobox_to_key_value_lines() -> None:
+    """Every {{Infobox <variant>}} on the wiki must surface its fields, not only Item.
+
+    The dispatcher used to match ``infobox item`` exactly, so Character,
+    Clothes, Food, Tag, Fish, Location, and Furniture infoboxes were
+    silently dropped by strip_code — taking birthdays, gifts, recipes,
+    and tag-likes with them. The image skip-list must still hold.
+    """
+    wikitext = (
+        "{{Infobox Character\n"
+        "|birthday=December 4\n"
+        "|gift=Hot Cocoa\n"
+        "|image=Foo.png\n"
+        "}}"
+    )
+    out = parse_wikitext(wikitext)
+    assert "Birthday: December 4" in out
+    assert "Gift: Hot Cocoa" in out
+    assert "Foo.png" not in out
+
+
+def test_parse_wikitext_expands_relationship_template_to_name_with_role() -> None:
+    """{{Relationship|Name|role}} must surface as ``Name (role)``.
+
+    Without the handler, the ``related`` field on every character
+    infobox collapses to empty: ``_expand_infobox`` recurses into the
+    value, but strip_code drops unregistered sub-templates entirely.
+    """
+    out = parse_wikitext("{{Relationship|Cappuccino|best friend}}")
+    assert "Cappuccino (best friend)" in out
+
+
+def test_parse_wikitext_expands_relationship_with_only_name_param() -> None:
+    """A one-param {{Relationship|Name}} must render the name with no empty parens.
+
+    Pages with abbreviated Relationship calls must produce readable
+    output, not ``Cappuccino ()``.
+    """
+    out = parse_wikitext("{{Relationship|Cappuccino}}")
+    assert "Cappuccino" in out
+    assert "()" not in out
+
+
+def test_parse_wikitext_recursively_expands_relationships_inside_infobox() -> None:
+    """Character infobox ``related`` field renders sub-templates as Name (role) pairs.
+
+    Integration test for the dispatcher generalization + Relationship
+    handler working together. This is the path that unblocks the
+    Cinnamoroll-friends-list eval failure.
+    """
+    wikitext = (
+        "{{Infobox Character\n"
+        "|related = {{Relationship|Cappuccino|best friend}}, "
+        "{{Relationship|Espresso|friend}}\n"
+        "}}"
+    )
+    out = parse_wikitext(wikitext)
+    assert "Related:" in out
+    assert "Cappuccino (best friend)" in out
+    assert "Espresso (friend)" in out
+
+
 def test_parse_wikitext_cleans_paragraph_html_fragments() -> None:
     """Wiki tables leave <p> fragments; they must become readable separators.
 
