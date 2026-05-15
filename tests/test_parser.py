@@ -7,7 +7,19 @@ would fail if the handler returned the wrong field, the wrong join
 character, or the empty string.
 """
 
+import pytest
+from pytest_mock import MockerFixture
+
+from ingestion import parser
+from ingestion.api_client import WikiAPIError
 from ingestion.parser import extract_sections, parse_wikitext
+
+
+@pytest.fixture(autouse=True)
+def _reset_character_gifts_cache() -> None:
+    """Keep cross-test cache state from leaking; tests assert on call counts."""
+    parser._character_gifts_cache.clear()
+    parser._character_gifts_expanding.clear()
 
 # ---------------------------------------------------------------------------
 # parse_wikitext
@@ -169,6 +181,82 @@ def test_parse_wikitext_recursively_expands_relationships_inside_infobox() -> No
     assert "Related:" in out
     assert "Cappuccino (best friend)" in out
     assert "Espresso (friend)" in out
+
+
+def test_parse_wikitext_expands_character_gifts_template(
+    mocker: MockerFixture,
+) -> None:
+    """{{KeroppiGifts}} inlines the fetched Template:<Name>Gifts wikitext.
+
+    Without this handler, strip_code drops the unknown template and the
+    'Gifts for Raising Friendship' section on every character page
+    ends up empty.
+    """
+    template_body = (
+        "<includeonly>{| class=\"wikitable\"\n"
+        "!Value!!Item\n"
+        "|-\n"
+        "|7|| {{Icon/Link|Critter Totem}}\n"
+        "|-\n"
+        "|5|| {{Icon/Link|Bush Friend}}\n"
+        "|}</includeonly>"
+    )
+    mocker.patch(
+        "ingestion.parser.get_page_wikitext",
+        return_value=template_body,
+    )
+    out = parse_wikitext("{{KeroppiGifts}}")
+    assert "Critter Totem" in out
+    assert "Bush Friend" in out
+    assert "includeonly" not in out
+    assert "{{" not in out
+
+
+def test_parse_wikitext_caches_character_gifts_lookups(
+    mocker: MockerFixture,
+) -> None:
+    """Repeated {{<Name>Gifts}} calls must hit the API once per template name.
+
+    parse_wikitext and extract_sections both run per page during
+    ingestion; uncached, ~50 character pages → ~100 redundant fetches.
+    """
+    mock = mocker.patch(
+        "ingestion.parser.get_page_wikitext",
+        return_value="<includeonly>{| !A!!B |}</includeonly>",
+    )
+    parse_wikitext("{{KeroppiGifts}}")
+    extract_sections("{{KeroppiGifts}}")
+    assert mock.call_count == 1
+
+
+def test_parse_wikitext_drops_gifts_on_api_failure(mocker: MockerFixture) -> None:
+    """parse_wikitext keeps going when Template:<Name>Gifts fetch fails.
+
+    Surrounding prose still has to flow into chunks; a transient API
+    error must not abort the whole page's ingestion.
+    """
+    mocker.patch(
+        "ingestion.parser.get_page_wikitext",
+        side_effect=WikiAPIError("simulated wiki outage"),
+    )
+    out = parse_wikitext("Before {{KeroppiGifts}} after.")
+    assert "Before" in out
+    assert "after" in out
+    assert "KeroppiGifts" not in out
+
+
+def test_parse_wikitext_bare_gifts_template_does_not_call_api(
+    mocker: MockerFixture,
+) -> None:
+    """Bare ``{{Gifts|...}}`` (existing real template) must not trigger an API fetch.
+
+    Only `<Name>Gifts` patterns should match the dispatcher — the bare
+    Gifts template uses its own positional args and is handled by
+    strip_code.
+    """
+    mock = mocker.patch("ingestion.parser.get_page_wikitext")
+    parse_wikitext("{{Gifts|Cinnamoroll|Candy Cloud}}")
+    assert mock.call_count == 0
 
 
 def test_parse_wikitext_cleans_paragraph_html_fragments() -> None:

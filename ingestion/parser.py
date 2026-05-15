@@ -15,7 +15,17 @@ import mwparserfromhell
 from mwparserfromhell.nodes import Template
 from mwparserfromhell.wikicode import Wikicode
 
+from ingestion.api_client import WikiAPIError, get_page_wikitext
+
 logger = logging.getLogger(__name__)
+
+# Cache fetched `Template:<Name>Gifts` wikitext for the process lifetime so the
+# template body is fetched at most once per character even though both
+# parse_wikitext and extract_sections run for every page.
+_character_gifts_cache: dict[str, str] = {}
+# Guard against a `<Name>Gifts` template that transcludes itself; the recursive
+# parse below would otherwise loop until the API rate limit kicked in.
+_character_gifts_expanding: set[str] = set()
 
 
 def _expand_templates(parsed: Wikicode) -> None:
@@ -61,6 +71,8 @@ def _template_to_text(name: str, template: Template) -> str | None:
         return _expand_simple_param(template)
     if name == "item description":
         return _expand_item_description(template)
+    if name.endswith("gifts") and name != "gifts":
+        return _expand_character_gifts(template)
     if name.startswith("infobox "):
         return _expand_infobox(template)
     return None
@@ -93,6 +105,37 @@ def _expand_relationship(template: Template) -> str:
     if params:
         return params[0]
     return ""
+
+
+def _expand_character_gifts(template: Template) -> str | None:
+    """Fetch and render ``Template:<Name>Gifts`` content; cache per process."""
+    template_name = template.name.strip_code().strip()
+    if template_name in _character_gifts_expanding:
+        logger.warning(
+            "Skipping self-referential character-gifts template '%s'", template_name
+        )
+        return None
+    if template_name not in _character_gifts_cache:
+        try:
+            _character_gifts_cache[template_name] = get_page_wikitext(
+                f"Template:{template_name}"
+            )
+        except WikiAPIError as exc:
+            logger.warning(
+                "Failed to fetch Template:%s; dropping template body: %s",
+                template_name,
+                exc,
+            )
+            return None
+    _character_gifts_expanding.add(template_name)
+    try:
+        inner = mwparserfromhell.parse(_character_gifts_cache[template_name])
+        _expand_templates(inner)
+        _drop_file_wikilinks(inner)
+        text = _strip_with_cell_breaks(inner)
+        return _clean_html_fragments(text)
+    finally:
+        _character_gifts_expanding.discard(template_name)
 
 
 def _expand_simple_param(template: Template) -> str:

@@ -40,6 +40,13 @@ select = ["E", "W", "F", "I", "B", "C4", "UP"]
 strict = true
 python_version = "3.12"
 
+# `requests` ships without bundled stubs; types-requests is a third-party
+# package we don't currently depend on. Suppress the missing-stub error so
+# strict mypy stays useful on the rest of the codebase.
+[[tool.mypy.overrides]]
+module = "requests.*"
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 log_file = "logs/pytest.log"
 log_file_level = "INFO"
