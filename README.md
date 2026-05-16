@@ -154,6 +154,21 @@ CHUNKING_STRATEGY=section \
 python sync.py --mode replay --snapshot snapshots/2026-05-12.parquet
 ```
 
+To build every collection required for the planned E1–E4 experiments
+(baseline, section-chunker variant, OpenAI-embedding variant) in one
+sweep, use the wrapper script:
+
+```bash
+python scripts/run_ablation_ingestion.py
+python scripts/run_ablation_ingestion.py --only e1_section   # one variant
+python scripts/run_ablation_ingestion.py --force             # re-ingest existing
+```
+
+The script preflights snapshot existence and `OPENAI_API_KEY`, skips
+any variant whose target collection already has chunks, and stops on
+the first failure. Use the manual env-var pattern above for ad-hoc
+variants outside the planned matrix.
+
 The startup drift check verifies each collection's stored
 chunking/embedding settings against the active config and refuses to
 mix chunks built with different parameters (see "Embedding model drift"
