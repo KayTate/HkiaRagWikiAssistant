@@ -8,6 +8,10 @@ __pycache__/
 .ruff_cache/
 .pytest_cache/
 
+# Coverage data (regenerated on every `pytest --cov` run; .coverage.* covers parallel-run shards)
+.coverage
+.coverage.*
+
 # Data stores (reproducible or local-only)
 chroma_data/
 data/ingestion_state.db
