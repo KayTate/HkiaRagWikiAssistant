@@ -151,6 +151,58 @@ def get_page_wikitext(page_title: str) -> str:
         ) from exc
 
 
+def get_cargo_items(
+    tables: str,
+    fields: str,
+    where: str,
+    group_by: str | None = None,
+    order_by: str | None = None,
+    limit: int = 500,
+) -> list[dict[str, str]]:
+    """Run a Cargo query and return unwrapped row dicts.
+
+    Cargo wraps each row as ``{"title": {<fields>}}`` regardless of the
+    underlying table name; this helper unwraps so callers get a plain
+    list of field dicts.
+
+    Args:
+        tables: Cargo table name(s), e.g. ``"TagItemList"``.
+        fields: Comma-separated field list, e.g. ``"name"``.
+        where: WHERE clause body (no leading ``WHERE``).
+        group_by: Optional GROUP BY clause body.
+        order_by: Optional ORDER BY clause body.
+        limit: Row cap; Cargo's hard limit is 5000 per request.
+
+    Returns:
+        List of row dicts, each mapping field name to string value.
+
+    Raises:
+        WikiAPIError: If the API call fails or returns an unexpected shape.
+    """
+    params: dict[str, Any] = {
+        "action": "cargoquery",
+        "tables": tables,
+        "fields": fields,
+        "where": where,
+        "limit": str(limit),
+        "format": "json",
+    }
+    if group_by is not None:
+        params["group_by"] = group_by
+    if order_by is not None:
+        params["order_by"] = order_by
+
+    data = _get_with_retry(params)
+    try:
+        rows = data["cargoquery"]
+    except KeyError as exc:
+        raise WikiAPIError(
+            f"Unexpected cargoquery response shape: missing key {exc}; "
+            f"params={params}"
+        ) from exc
+    return [row["title"] for row in rows if isinstance(row, dict) and "title" in row]
+
+
 def get_all_pages_with_revision_ids() -> list[dict[str, str | int]]:
     """Fetch all page titles with their current revision IDs in a single pass.
 

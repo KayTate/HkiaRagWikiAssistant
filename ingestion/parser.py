@@ -15,7 +15,7 @@ import mwparserfromhell
 from mwparserfromhell.nodes import Template
 from mwparserfromhell.wikicode import Wikicode
 
-from ingestion.api_client import WikiAPIError, get_page_wikitext
+from ingestion.api_client import WikiAPIError, get_cargo_items, get_page_wikitext
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +26,11 @@ _character_gifts_cache: dict[str, str] = {}
 # Guard against a `<Name>Gifts` template that transcludes itself; the recursive
 # parse below would otherwise loop until the API rate limit kicked in.
 _character_gifts_expanding: set[str] = set()
+
+# Cache rendered ``{{TagItemList}}`` sentences keyed by (sorted tags, type) so a
+# tag query runs at most once per process even when the same template appears
+# on many pages and through both parse_wikitext and extract_sections.
+_tag_item_list_cache: dict[tuple[str, ...], str] = {}
 
 
 def _expand_templates(parsed: Wikicode) -> None:
@@ -73,6 +78,8 @@ def _template_to_text(name: str, template: Template) -> str | None:
         return _expand_item_description(template)
     if name.endswith("gifts") and name != "gifts":
         return _expand_character_gifts(template)
+    if name == "tagitemlist":
+        return _expand_tag_item_list(template)
     if name.startswith("infobox "):
         return _expand_infobox(template)
     return None
@@ -136,6 +143,77 @@ def _expand_character_gifts(template: Template) -> str | None:
         return _clean_html_fragments(text)
     finally:
         _character_gifts_expanding.discard(template_name)
+
+
+def _expand_tag_item_list(template: Template) -> str | None:
+    """Render ``{{TagItemList|tag=X[|tag2=Y...][|type=Z]}}`` as a sentence.
+
+    The template's wikitext is a Cargo query directive; the actual item
+    list is materialized server-side. We query Cargo directly to pull
+    item names and format them as a single readable sentence so the
+    chunk has retrievable, embedding-friendly content.
+    """
+    tags: list[str] = []
+    if template.has("tag"):
+        tags.append(str(template.get("tag").value).strip())
+    for i in range(2, 6):
+        key = f"tag{i}"
+        if template.has(key):
+            tags.append(str(template.get(key).value).strip())
+    tags = [t for t in tags if t]
+    if not tags:
+        return None
+
+    item_type = (
+        str(template.get("type").value).strip() if template.has("type") else ""
+    )
+
+    cache_key: tuple[str, ...] = (item_type, *sorted(tags))
+    if cache_key in _tag_item_list_cache:
+        return _tag_item_list_cache[cache_key]
+
+    # Defensive quote-escape — wikitext is trusted, but a stray ``"`` in
+    # a tag value would otherwise close the Cargo string and break the
+    # whole WHERE clause.
+    escaped_tags = [t.replace('"', '\\"') for t in tags]
+    escaped_type = item_type.replace('"', '\\"')
+    or_clauses = " OR ".join(f'tags HOLDS "{t}"' for t in escaped_tags)
+    where = f"({or_clauses})"
+    if escaped_type:
+        where = f'{where} AND type="{escaped_type}"'
+
+    try:
+        rows = get_cargo_items(
+            tables="TagItemList",
+            fields="name",
+            where=where,
+            group_by="name",
+            order_by="name ASC",
+        )
+    except WikiAPIError as exc:
+        logger.warning(
+            "Failed to query TagItemList for tags=%s type=%s: %s",
+            tags,
+            item_type or "(none)",
+            exc,
+        )
+        return None
+
+    names = [r.get("name", "").strip() for r in rows]
+    names = [n for n in names if n]
+    if not names:
+        return None
+
+    if len(tags) == 1:
+        prefix = f"Items with the {tags[0]} tag"
+    else:
+        prefix = f"Items with the tags {', '.join(tags)}"
+    if item_type:
+        prefix = f"{prefix} (type: {item_type})"
+    sentence = f"{prefix}: {', '.join(names)}."
+
+    _tag_item_list_cache[cache_key] = sentence
+    return sentence
 
 
 def _expand_simple_param(template: Template) -> str:

@@ -16,10 +16,11 @@ from ingestion.parser import extract_sections, parse_wikitext
 
 
 @pytest.fixture(autouse=True)
-def _reset_character_gifts_cache() -> None:
+def _reset_parser_caches() -> None:
     """Keep cross-test cache state from leaking; tests assert on call counts."""
     parser._character_gifts_cache.clear()
     parser._character_gifts_expanding.clear()
+    parser._tag_item_list_cache.clear()
 
 # ---------------------------------------------------------------------------
 # parse_wikitext
@@ -257,6 +258,111 @@ def test_parse_wikitext_bare_gifts_template_does_not_call_api(
     mock = mocker.patch("ingestion.parser.get_page_wikitext")
     parse_wikitext("{{Gifts|Cinnamoroll|Candy Cloud}}")
     assert mock.call_count == 0
+
+
+def test_parse_wikitext_expands_tag_item_list_template(
+    mocker: MockerFixture,
+) -> None:
+    """{{TagItemList|tag=Metal}} must surface the queried item names as a sentence.
+
+    Without this handler, strip_code drops the template entirely and
+    pages that only list items via TagItemList (e.g. tag landing pages)
+    produce empty chunks — the Metal-tag golden eval question has no
+    retrievable content to answer from.
+    """
+    mocker.patch(
+        "ingestion.parser.get_cargo_items",
+        return_value=[
+            {"name": "Huge Metal Magnet Lure"},
+            {"name": "Ingot"},
+            {"name": "Microphone"},
+        ],
+    )
+    out = parse_wikitext("{{TagItemList|tag=Metal}}")
+    assert "Metal" in out
+    assert "Huge Metal Magnet Lure" in out
+    assert "Ingot" in out
+    assert "Microphone" in out
+    assert "{{" not in out
+
+
+def test_parse_wikitext_caches_tag_item_list_lookups(
+    mocker: MockerFixture,
+) -> None:
+    """Repeated {{TagItemList}} calls with the same args must hit Cargo once.
+
+    parse_wikitext and extract_sections both run per page during
+    ingestion. Without the per-(tags, type) cache the same Cargo query
+    runs twice for every tag landing page, doubling rate-limited API
+    pressure on a hot path.
+    """
+    mock = mocker.patch(
+        "ingestion.parser.get_cargo_items",
+        return_value=[{"name": "Ingot"}],
+    )
+    parse_wikitext("{{TagItemList|tag=Metal}}")
+    extract_sections("{{TagItemList|tag=Metal}}")
+    assert mock.call_count == 1
+
+
+def test_parse_wikitext_drops_tag_item_list_on_api_failure(
+    mocker: MockerFixture,
+) -> None:
+    """parse_wikitext keeps going when the Cargo query fails.
+
+    Surrounding prose still has to flow into chunks; a transient API
+    error on one template must not abort the whole page's ingestion.
+    """
+    mocker.patch(
+        "ingestion.parser.get_cargo_items",
+        side_effect=WikiAPIError("simulated cargo outage"),
+    )
+    out = parse_wikitext("Before {{TagItemList|tag=Metal}} after.")
+    assert "Before" in out
+    assert "after" in out
+    assert "TagItemList" not in out
+
+
+def test_parse_wikitext_handles_multi_tag_tag_item_list(
+    mocker: MockerFixture,
+) -> None:
+    """Multi-tag templates must build an OR'd Cargo WHERE and a multi-tag sentence.
+
+    The wiki's TagItemList template treats tag/tag2/tag3/... as an OR
+    across the ``tags`` HOLDS predicate. The handler must mirror that
+    semantics so the rendered list matches what the server-rendered
+    template would produce.
+    """
+    mock = mocker.patch(
+        "ingestion.parser.get_cargo_items",
+        return_value=[{"name": "Sounds of Steel"}, {"name": "Volcanic Guitar"}],
+    )
+    out = parse_wikitext("{{TagItemList|tag=Metal|tag2=Magic}}")
+    where_arg = mock.call_args.kwargs.get("where") or mock.call_args.args[2]
+    assert 'tags HOLDS "Metal"' in where_arg
+    assert 'tags HOLDS "Magic"' in where_arg
+    assert " OR " in where_arg
+    assert "Metal" in out and "Magic" in out
+    assert "Sounds of Steel" in out
+    assert "Volcanic Guitar" in out
+
+
+def test_parse_wikitext_tag_item_list_empty_results(mocker: MockerFixture) -> None:
+    """An empty Cargo result must drop the template body, not emit a bare prefix.
+
+    A chunk reading ``Items with the Metal tag: .`` would mislead the
+    embedder and the LLM. Returning None lets strip_code drop the
+    template entirely so the page reads naturally without it.
+    """
+    mocker.patch(
+        "ingestion.parser.get_cargo_items",
+        return_value=[],
+    )
+    out = parse_wikitext("Before {{TagItemList|tag=Imaginary}} after.")
+    assert "Before" in out
+    assert "after" in out
+    assert "TagItemList" not in out
+    assert "Items with" not in out
 
 
 def test_parse_wikitext_cleans_paragraph_html_fragments() -> None:

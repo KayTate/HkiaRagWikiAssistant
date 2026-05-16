@@ -22,6 +22,7 @@ from ingestion.api_client import (
     WikiAPIError,
     get_all_page_titles,
     get_all_pages_with_revision_ids,
+    get_cargo_items,
     get_page_revision_id,
     get_pages_wikitext_batch,
     opensearch_title,
@@ -221,6 +222,56 @@ def test_get_pages_wikitext_batch_omits_pages_without_content(mocker: Any) -> No
     assert result == {"HasContent": "Body"}
     assert "MissingStar" not in result
     assert "NoRevisions" not in result
+
+
+# ---------------------------------------------------------------------------
+# get_cargo_items
+# ---------------------------------------------------------------------------
+
+
+def test_get_cargo_items_unwraps_title_rows(mocker: Any) -> None:
+    """Cargo wraps every row as ``{"title": {...}}``; the helper must unwrap.
+
+    Callers want a plain ``list[dict]`` of field values. A regression
+    that returned the raw cargoquery list would force every caller to
+    re-implement the unwrap and silently drop ``.get('title')``-less
+    rows.
+    """
+    mocker.patch(
+        "ingestion.api_client._get_with_retry",
+        return_value={
+            "cargoquery": [
+                {"title": {"name": "Ingot"}},
+                {"title": {"name": "Microphone"}},
+            ]
+        },
+    )
+    rows = get_cargo_items(
+        tables="TagItemList",
+        fields="name",
+        where='tags HOLDS "Metal"',
+    )
+    assert rows == [{"name": "Ingot"}, {"name": "Microphone"}]
+
+
+def test_get_cargo_items_raises_on_malformed_response(mocker: Any) -> None:
+    """A response missing the ``cargoquery`` key must surface as WikiAPIError.
+
+    Cargo returns the empty list (not a missing key) when there are no
+    matches, so a missing key indicates an actual API problem — surface
+    it so the parser's per-template error handler can log + drop the
+    template body cleanly.
+    """
+    mocker.patch(
+        "ingestion.api_client._get_with_retry",
+        return_value={},
+    )
+    with pytest.raises(WikiAPIError, match="cargoquery"):
+        get_cargo_items(
+            tables="TagItemList",
+            fields="name",
+            where='tags HOLDS "Metal"',
+        )
 
 
 # ---------------------------------------------------------------------------
