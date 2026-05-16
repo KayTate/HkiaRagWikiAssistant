@@ -95,10 +95,11 @@ also create a new collection and re-ingest:
 2. Run `python sync.py --mode full` to build the new collection.
 3. Point your `.env` at the new collection name.
 
-Attempting to ingest into a collection whose stored chunks were
-embedded with a different model raises `EmbeddingModelMismatchError`
-with the same remediation steps in the message. The same convention
-applies to changing `CHUNKING_STRATEGY`.
+Attempting to ingest into a collection whose stored chunks disagree
+with the current configuration raises `CollectionConfigMismatchError`
+with the same remediation steps in the message. The check covers
+`EMBEDDING_MODEL`, `CHUNKING_STRATEGY`, `CHUNK_SIZE`, and
+`CHUNK_OVERLAP` — change any of them and bump the collection name.
 
 ## Usage
 
@@ -116,6 +117,47 @@ python sync.py --mode incremental
 # Check ingestion progress
 python sync.py --mode status
 ```
+
+### Snapshot capture and replay ingestion
+
+For reproducible chunking/embedding experiments, capture the wiki to a
+Parquet file once and ingest from that file under different settings.
+Every variant runs against the same source bytes, so quality differences
+are attributable to config — not to wiki drift between runs.
+
+Capture a snapshot:
+
+```bash
+# Full snapshot (every page)
+python scripts/snapshot_wiki.py --output snapshots/2026-05-12.parquet
+
+# Smoke-test cap (first N pages only)
+python scripts/snapshot_wiki.py \
+    --output snapshots/smoke.parquet \
+    --limit 50
+```
+
+Replay the snapshot into ingestion:
+
+```bash
+python sync.py --mode replay --snapshot snapshots/2026-05-12.parquet
+```
+
+Each variant should run with its own `STATE_DB_PATH` and its own
+`CHROMA_COLLECTION_NAME` so the variants coexist for side-by-side
+comparison:
+
+```bash
+STATE_DB_PATH=./data/state_section_v1.db \
+CHROMA_COLLECTION_NAME=hkia_nomic-embed-text_section_v1 \
+CHUNKING_STRATEGY=section \
+python sync.py --mode replay --snapshot snapshots/2026-05-12.parquet
+```
+
+The startup drift check verifies each collection's stored
+chunking/embedding settings against the active config and refuses to
+mix chunks built with different parameters (see "Embedding model drift"
+above).
 
 ### Chat Interface
 
@@ -189,7 +231,8 @@ hkia-rag/
 │   ├── chunker.py              # Recursive and section-based chunking
 │   ├── embedder.py             # Ollama and OpenAI embedding providers
 │   ├── state_db.py             # SQLite ingestion state tracking (bulk helpers)
-│   └── pipeline.py             # Full and incremental ingestion orchestration
+│   ├── snapshot.py             # Parquet snapshot read/write for replay ingestion
+│   └── pipeline.py             # Full, incremental, and replay ingestion orchestration
 ├── vectorstore/                # ChromaDB vector store
 │   ├── client.py               # Search, upsert, and embedding-model guard
 │   └── schema.py               # ChunkMetadata Pydantic model (with constraints)
@@ -206,8 +249,9 @@ hkia-rag/
 │   ├── generate.py             # Synthetic Q&A generation
 │   └── runner.py               # MLflow experiment runner with LLM judge scorers
 ├── app/gradio_app.py           # Gradio chat frontend
-├── sync.py                     # CLI entry point for ingestion
+├── sync.py                     # CLI entry point for ingestion (full/incremental/status/replay)
 ├── scripts/run_eval.py         # CLI entry point for evaluation runs
+├── scripts/snapshot_wiki.py    # CLI entry point for capturing wiki snapshots
 └── tests/                      # pytest test suite (160 tests)
 ```
 
