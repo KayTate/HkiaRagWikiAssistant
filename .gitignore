@@ -17,6 +17,7 @@ chroma_data/
 data/ingestion_state.db
 mlruns/
 mlflow.db
+snapshots/
 
 # Logs
 logs/

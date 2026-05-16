@@ -27,6 +27,12 @@ dependencies = [
     # explicitly here. Removing it surfaces as a runtime ImportError
     # the first time mlflow.genai.evaluate runs the LLM judges.
     "litellm>=1.83.14,<2.0",
+    # pyarrow is the on-disk format for wiki snapshots (ingestion/snapshot.py)
+    # and the snapshot-replay ingestion mode. It is NOT used for general
+    # tabular processing — we read/write via the streaming ParquetWriter /
+    # ParquetFile API and never touch pandas.
+    "pyarrow>=17,<22",
+    "radon>=6.0.1",
 ]
 
 [tool.ruff]
@@ -45,6 +51,11 @@ python_version = "3.12"
 # strict mypy stays useful on the rest of the codebase.
 [[tool.mypy.overrides]]
 module = "requests.*"
+ignore_missing_imports = true
+
+# pyarrow does not ship a py.typed marker; same rationale as requests above.
+[[tool.mypy.overrides]]
+module = "pyarrow.*"
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

@@ -23,6 +23,14 @@ from config.settings import settings
 logger = logging.getLogger(__name__)
 
 
+# Per-request title cap for get_pages_wikitext_batch. The MediaWiki API
+# accepts up to 50 pipe-separated titles per `titles=` parameter, but a
+# smaller batch keeps individual response payloads under a few hundred KB
+# and bounds retry cost when one request fails. Shared by the ingestion
+# pipeline and the snapshot-capture script so both batch the same way.
+_WIKITEXT_BATCH_SIZE = 20
+
+
 class WikiAPIError(RuntimeError):
     """Raised when the MediaWiki API returns an unrecoverable error."""
 

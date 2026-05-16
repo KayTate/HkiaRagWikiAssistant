@@ -142,17 +142,14 @@ def _mark_changed_pages_pending(
     state_db.upsert_pages(rows)
 
 
-_WIKITEXT_BATCH_SIZE = 20
-
-
 def _process_pending_pages() -> None:
     """Run the per-page ingestion loop for all pages with status='pending'.
 
-    Fetches wikitext in batches of _WIKITEXT_BATCH_SIZE pages via the batch
-    API to minimize the number of wiki requests. Per-page failures are
-    caught so the rest of the run still processes — the failing page
-    keeps its 'in_progress' status and is retried on the next run.
-    Batch-level errors (wikitext fetch failures, embedding-model
+    Fetches wikitext in batches of ``api_client._WIKITEXT_BATCH_SIZE``
+    pages via the batch API to minimize the number of wiki requests.
+    Per-page failures are caught so the rest of the run still processes —
+    the failing page keeps its 'in_progress' status and is retried on the
+    next run. Batch-level errors (wikitext fetch failures, embedding-model
     mismatch) propagate, since those signal a wiki- or
     configuration-wide problem where continuing would just produce more
     of the same error.
@@ -163,8 +160,9 @@ def _process_pending_pages() -> None:
     succeeded = 0
     failed = 0
 
-    for start in range(0, len(pending), _WIKITEXT_BATCH_SIZE):
-        batch = pending[start : start + _WIKITEXT_BATCH_SIZE]
+    batch_size = api_client._WIKITEXT_BATCH_SIZE
+    for start in range(0, len(pending), batch_size):
+        batch = pending[start : start + batch_size]
         titles = [p["page_title"] for p in batch]
         wikitext_map = api_client.get_pages_wikitext_batch(titles)
 
