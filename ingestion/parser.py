@@ -19,6 +19,15 @@ from ingestion.api_client import WikiAPIError, get_cargo_items, get_page_wikitex
 
 logger = logging.getLogger(__name__)
 
+# MediaWiki redirect directive at the top of a page. The bracket group captures
+# the target title up to (but not including) a section anchor (``#``) or pipe
+# display text (``|``), since the canonical page title is everything before
+# those — matching the API behaviour ``opensearch`` and ``get_page_by_title``
+# would resolve the source title to.
+_REDIRECT_PAGE_PATTERN = re.compile(
+    r"^\s*#REDIRECT\s*:?\s*\[\[([^\]\|#]+)", re.IGNORECASE
+)
+
 # Cache fetched `Template:<Name>Gifts` wikitext for the process lifetime so the
 # template body is fetched at most once per character even though both
 # parse_wikitext and extract_sections run for every page.
@@ -287,6 +296,22 @@ def _drop_file_wikilinks(parsed: Wikicode) -> None:
                 logger.debug(
                     "Wikilink '%s' already removed; skipping: %s", link.title, exc
                 )
+
+
+def detect_redirect_target(wikitext: str) -> str | None:
+    """Return the canonical target title if wikitext is a MediaWiki redirect.
+
+    Matches the conventional ``#REDIRECT [[Target Title]]`` form (also
+    ``#redirect:`` with optional colon and whitespace). Strips section
+    anchors (``#section``) and pipe-display text (``|display``) from the
+    captured title since we only want the canonical page title. Returns
+    None for any non-redirect wikitext, including pages where the redirect
+    directive appears mid-content rather than at the top.
+    """
+    match = _REDIRECT_PAGE_PATTERN.match(wikitext)
+    if match is None:
+        return None
+    return match.group(1).strip() or None
 
 
 def parse_wikitext(wikitext: str) -> str:

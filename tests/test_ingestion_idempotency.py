@@ -464,3 +464,133 @@ def test_failure_does_not_halt_subsequent_pages(mocker: Any) -> None:
         assert call_count["n"] == 3, (
             f"Expected 3 embedder calls (one per page), got {call_count['n']}"
         )
+
+
+def test_ingestion_skips_redirect_pages_and_records_mapping(mocker: Any) -> None:
+    """Redirect pages must not embed chunks; their target must land in page_redirects.
+
+    REDIRECT stubs were 21.5% of the previous collection because the
+    parser surfaced ``#REDIRECT [[Target]]`` as a chunk and the pipeline
+    embedded it. The fix detects the directive in ``_ingest_page``,
+    writes the source→target mapping to SQLite, calls
+    delete_chunks_by_source to scrub any chunks left over from a
+    previous content version of the same page, and marks the page
+    complete without embedding.
+    """
+    with tempfile.TemporaryDirectory() as tmpdir:
+        db_path = str(Path(tmpdir) / "state.db")
+        chroma_path = str(Path(tmpdir) / "chroma")
+
+        mocker.patch("config.settings.settings.state_db_path", db_path)
+        mocker.patch("config.settings.settings.chroma_persist_dir", chroma_path)
+        mocker.patch("config.settings.settings.embedding_model", "nomic-embed-text")
+        mocker.patch("config.settings.settings.embedding_model_version", "v1.5")
+        mocker.patch("config.settings.settings.chunking_strategy", "recursive")
+        mocker.patch("config.settings.settings.chunk_size", 512)
+        mocker.patch("config.settings.settings.chunk_overlap", 64)
+
+        fake_collection = _make_fake_collection()
+        mocker.patch(
+            "vectorstore.client.get_or_create_collection",
+            return_value=fake_collection,
+        )
+
+        mocker.patch(
+            "ingestion.api_client.get_all_pages_with_revision_ids",
+            return_value=[
+                {"title": "Apple Orchard", "revision_id": 1},
+                {"title": "Apple Tree", "revision_id": 2},
+            ],
+        )
+        mocker.patch(
+            "ingestion.api_client.get_pages_wikitext_batch",
+            return_value={
+                "Apple Orchard": "The orchard is full of apples.",
+                "Apple Tree": "#REDIRECT [[Apple Orchard]]",
+            },
+        )
+        mocker.patch(
+            "ingestion.embedder.embed_chunks",
+            side_effect=lambda chunks: [[0.1] * 4 for _ in chunks],
+        )
+
+        from ingestion.pipeline import run_full_ingestion
+        from ingestion.state_db import get_all_redirects, get_pages_by_status
+
+        run_full_ingestion()
+
+        # Mapping persisted.
+        assert get_all_redirects() == {"Apple Tree": "Apple Orchard"}
+
+        # No chunks embedded for the redirect source.
+        redirect_chunks = [
+            doc_id
+            for doc_id, meta in fake_collection._stored_metadatas.items()
+            if meta.get("source_title") == "Apple Tree"
+        ]
+        assert redirect_chunks == [], (
+            "Redirect pages must not produce ChromaDB chunks; got "
+            f"{redirect_chunks}"
+        )
+
+        # Both pages reach complete — the redirect page is finalised without
+        # embedding, the content page through the normal flow.
+        complete_titles = {p["page_title"] for p in get_pages_by_status("complete")}
+        assert complete_titles == {"Apple Orchard", "Apple Tree"}
+
+
+def test_ingestion_clears_stale_redirect_when_page_gains_content(
+    mocker: Any,
+) -> None:
+    """A page that transitions from redirect to content must lose its redirect row.
+
+    Stale mappings would otherwise keep diverting agent retrieval to the
+    old target after the source page acquires its own canonical content.
+    The pipeline calls delete_redirect on every non-redirect ingest pass
+    so the transition is self-healing.
+    """
+    with tempfile.TemporaryDirectory() as tmpdir:
+        db_path = str(Path(tmpdir) / "state.db")
+        chroma_path = str(Path(tmpdir) / "chroma")
+
+        mocker.patch("config.settings.settings.state_db_path", db_path)
+        mocker.patch("config.settings.settings.chroma_persist_dir", chroma_path)
+        mocker.patch("config.settings.settings.embedding_model", "nomic-embed-text")
+        mocker.patch("config.settings.settings.embedding_model_version", "v1.5")
+        mocker.patch("config.settings.settings.chunking_strategy", "recursive")
+        mocker.patch("config.settings.settings.chunk_size", 512)
+        mocker.patch("config.settings.settings.chunk_overlap", 64)
+
+        fake_collection = _make_fake_collection()
+        mocker.patch(
+            "vectorstore.client.get_or_create_collection",
+            return_value=fake_collection,
+        )
+        mocker.patch(
+            "ingestion.embedder.embed_chunks",
+            side_effect=lambda chunks: [[0.1] * 4 for _ in chunks],
+        )
+
+        from ingestion import state_db
+
+        # Pre-existing redirect mapping from a prior ingest.
+        state_db.upsert_redirect("Apple Tree", "Apple Orchard")
+        assert state_db.get_all_redirects() == {"Apple Tree": "Apple Orchard"}
+
+        # New ingest: Apple Tree now has content.
+        mocker.patch(
+            "ingestion.api_client.get_all_pages_with_revision_ids",
+            return_value=[{"title": "Apple Tree", "revision_id": 99}],
+        )
+        mocker.patch(
+            "ingestion.api_client.get_pages_wikitext_batch",
+            return_value={"Apple Tree": "An apple tree bears apples."},
+        )
+
+        from ingestion.pipeline import run_full_ingestion
+
+        run_full_ingestion()
+
+        assert state_db.get_all_redirects() == {}, (
+            "Stale redirect row must be cleared when page transitions to content"
+        )

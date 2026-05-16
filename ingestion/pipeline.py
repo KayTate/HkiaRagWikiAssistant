@@ -206,6 +206,19 @@ def _ingest_page(page_title: str, revision_id: int, wikitext: str) -> None:
         embedding_model=current_model,
     )
     try:
+        redirect_target = parser.detect_redirect_target(wikitext)
+        if redirect_target is not None:
+            state_db.upsert_redirect(page_title, redirect_target)
+            _finalize_page(page_title, revision_id, current_model)
+            logger.info(
+                "Page '%s' is a redirect to '%s'; recorded mapping, skipped embedding",
+                page_title,
+                redirect_target,
+            )
+            return
+        # Not a redirect — clear any stale row in case this page used to be one.
+        state_db.delete_redirect(page_title)
+
         plain_text = parser.parse_wikitext(wikitext)
         sections = parser.extract_sections(wikitext)
         chunks = chunker.chunk_text(

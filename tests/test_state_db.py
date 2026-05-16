@@ -282,3 +282,58 @@ def test_upsert_pages_uses_single_connection(
     )
     # Sanity: rows actually landed.
     assert len(state_db.get_pages([r["page_title"] for r in rows])) == 50
+
+
+# ---------------------------------------------------------------------------
+# page_redirects table
+# ---------------------------------------------------------------------------
+
+
+def test_upsert_redirect_inserts_and_updates(isolated_db: str) -> None:
+    """Second call with a different target must overwrite the first.
+
+    The wiki occasionally retargets a redirect (e.g. when a page is
+    merged into another). The pipeline calls upsert_redirect on every
+    redirect ingestion pass and must self-heal stale mappings rather
+    than carrying old targets that misroute agent retrieval.
+    """
+    state_db.upsert_redirect("Apple Tree", "Apple Orchard")
+    assert state_db.get_all_redirects() == {"Apple Tree": "Apple Orchard"}
+
+    state_db.upsert_redirect("Apple Tree", "Orchard")
+    assert state_db.get_all_redirects() == {"Apple Tree": "Orchard"}
+
+
+def test_delete_redirect_removes_row_and_is_idempotent(isolated_db: str) -> None:
+    """Delete must remove the row, and a second delete must be a silent no-op.
+
+    The pipeline calls delete_redirect on every non-redirect ingestion
+    pass (in case the page used to be a redirect). For pages that were
+    never redirects, the delete must not raise.
+    """
+    state_db.upsert_redirect("Apple Tree", "Apple Orchard")
+    state_db.delete_redirect("Apple Tree")
+    assert state_db.get_all_redirects() == {}
+
+    # Second call on a missing row: must not raise.
+    state_db.delete_redirect("Apple Tree")
+    state_db.delete_redirect("NeverExisted")
+
+
+def test_get_all_redirects_returns_dict_of_all_mappings(isolated_db: str) -> None:
+    """Bulk read must surface every persisted source→target mapping.
+
+    The agent loads the full table once per process to back its
+    in-memory lookup cache. A regression that dropped rows or returned
+    only a subset would silently break redirect-following on every
+    query whose source title was excluded.
+    """
+    state_db.upsert_redirect("Apple Tree", "Apple Orchard")
+    state_db.upsert_redirect("Cinnamoroll's Friend", "Cinnamoroll")
+    state_db.upsert_redirect("Metal Microphone", "Microphone")
+
+    assert state_db.get_all_redirects() == {
+        "Apple Tree": "Apple Orchard",
+        "Cinnamoroll's Friend": "Cinnamoroll",
+        "Metal Microphone": "Microphone",
+    }

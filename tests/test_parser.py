@@ -12,7 +12,7 @@ from pytest_mock import MockerFixture
 
 from ingestion import parser
 from ingestion.api_client import WikiAPIError
-from ingestion.parser import extract_sections, parse_wikitext
+from ingestion.parser import detect_redirect_target, extract_sections, parse_wikitext
 
 
 @pytest.fixture(autouse=True)
@@ -345,6 +345,43 @@ def test_parse_wikitext_handles_multi_tag_tag_item_list(
     assert "Metal" in out and "Magic" in out
     assert "Sounds of Steel" in out
     assert "Volcanic Guitar" in out
+
+
+def test_detect_redirect_target_returns_canonical_title() -> None:
+    """A bare ``#REDIRECT [[Target]]`` must yield the target title.
+
+    Pins the happy path so a future regex regression that drops the
+    capture group or eats the closing bracket trips the test rather
+    than silently letting every redirect mapping import as None.
+    """
+    assert detect_redirect_target("#REDIRECT [[Apple Orchard]]") == "Apple Orchard"
+
+
+def test_detect_redirect_target_strips_section_and_display() -> None:
+    """Section anchors and pipe-display text must not leak into the captured title.
+
+    Without this, ``[[Apple Orchard#Trees|the orchard]]`` would map to
+    ``"Apple Orchard#Trees|the orchard"`` and the SQLite redirect lookup
+    would miss every variant that uses a section or display label.
+    """
+    assert (
+        detect_redirect_target("#REDIRECT [[Apple Orchard#Trees|the orchard]]")
+        == "Apple Orchard"
+    )
+
+
+def test_detect_redirect_target_returns_none_for_content() -> None:
+    """Prose mentioning ``REDIRECT`` mid-content must not be misclassified.
+
+    The pipeline routes redirect pages to a side-table and skips
+    embedding entirely. A content page that happens to discuss redirects
+    in its body must keep flowing through the normal chunk path.
+    """
+    body = (
+        "The boardwalk has many shops.\n"
+        "It is a popular REDIRECT target in some games, but not this one."
+    )
+    assert detect_redirect_target(body) is None
 
 
 def test_parse_wikitext_tag_item_list_empty_results(mocker: MockerFixture) -> None:

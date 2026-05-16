@@ -2,8 +2,8 @@
 variants, then opensearch, then semantic search — wrapped in a single
 RETRIEVER MLflow span so the trace records exactly what the LLM sees."""
 
+import functools
 import logging
-import re
 from typing import Any
 
 import mlflow
@@ -11,6 +11,7 @@ from mlflow.entities import Document, SpanType
 
 from config.settings import settings
 from ingestion.embedder import embed_chunks
+from ingestion.state_db import get_all_redirects
 from vectorstore.client import (
     get_page_by_title as vs_get_page_by_title,
 )
@@ -20,12 +21,6 @@ from vectorstore.client import (
 
 logger = logging.getLogger(__name__)
 
-# Matches the canonical post-strip_code form of a MediaWiki redirect page:
-# wikitext "#REDIRECT [[Target]]" → "REDIRECT Target" after stripping markup.
-# The \b after REDIRECT rules out false positives like REDIRECTING /
-# REDIRECTED / REDIRECTLY, and [^\n]+ caps the captured title at the first
-# newline so trailing parsed content does not get slurped in.
-_REDIRECT_RE = re.compile(r"^\s*REDIRECT\b\s+([^\n]+)", re.IGNORECASE)
 _TITLE_VARIANT_SUFFIXES: tuple[str, ...] = (
     " (quest series)",
     " (quest)",
@@ -94,29 +89,27 @@ def _resolve_title_via_opensearch(entity: str) -> str | None:
         return None
 
 
-def _extract_redirect_target(chunks: list[dict[str, Any]]) -> str | None:
-    """Detect if chunks represent a wiki redirect and extract the target.
+@functools.cache
+def _load_redirects() -> dict[str, str]:
+    """Load the full redirect side-table once per process.
 
-    A redirect page has a single chunk whose text matches the canonical
-    post-strip_code form ``REDIRECT <target>`` (with whitespace between
-    the keyword and the title). Match is case-insensitive but requires a
-    word boundary after REDIRECT so prose pages starting with words like
-    "Redirecting" or "Redirected" are not misclassified as redirects.
-
-    Args:
-        chunks: Chunks retrieved for a page.
-
-    Returns:
-        The redirect target title, or None if not a redirect.
+    ``functools.cache`` memoises the dict for the agent process lifetime
+    so the SQLite read happens at most once. Tests reset via the autouse
+    fixture in tests/test_entity_resolution.py, which calls
+    ``_load_redirects.cache_clear()``. ~5k entries × ~50 chars at the
+    current wiki size is well under the cost of paying SQLite latency
+    on every agent request.
     """
-    if len(chunks) != 1:
-        return None
-    text = str(chunks[0].get("text", "")).strip()
-    match = _REDIRECT_RE.match(text)
-    if match is None:
-        return None
-    target = match.group(1).strip()
-    return target or None
+    return get_all_redirects()
+
+
+def _resolve_via_redirect(title: str) -> str:
+    """Map a wiki title through the redirect side-table, if present.
+
+    Titles not in the map pass through unchanged so every call site can
+    wrap a ``vs_get_page_by_title`` argument without a None-check.
+    """
+    return _load_redirects().get(title, title)
 
 
 def _fetch_entity_chunks(
@@ -174,18 +167,17 @@ def _resolve_entity_chunks(
         List of chunk dicts. May be empty if every fallback fails.
     """
     for candidate in _title_candidates(entity):
-        chunks = vs_get_page_by_title(candidate)
+        target = _resolve_via_redirect(candidate)
+        chunks = vs_get_page_by_title(target)
         if not chunks:
             continue
-
-        redirect_target = _extract_redirect_target(chunks)
-        if redirect_target is not None:
-            logger.info("'%s' redirects to '%s'; following", candidate, redirect_target)
-            redirected = vs_get_page_by_title(redirect_target)
-            if redirected:
-                return redirected
-
-        if candidate != entity:
+        if target != candidate:
+            logger.info(
+                "'%s' redirects to '%s' (via table); using target chunks",
+                candidate,
+                target,
+            )
+        elif candidate != entity:
             logger.info("Resolved '%s' to wiki page '%s'", entity, candidate)
         return chunks
 
@@ -196,18 +188,15 @@ def _resolve_entity_chunks(
             entity,
             resolved_title,
         )
-        chunks = vs_get_page_by_title(resolved_title)
+        target = _resolve_via_redirect(resolved_title)
+        if target != resolved_title:
+            logger.info(
+                "'%s' redirects to '%s' (via table); using target chunks",
+                resolved_title,
+                target,
+            )
+        chunks = vs_get_page_by_title(target)
         if chunks:
-            redirect_target = _extract_redirect_target(chunks)
-            if redirect_target is not None:
-                logger.info(
-                    "'%s' redirects to '%s'; following",
-                    resolved_title,
-                    redirect_target,
-                )
-                redirected = vs_get_page_by_title(redirect_target)
-                if redirected:
-                    return redirected
             return chunks
 
     logger.info(

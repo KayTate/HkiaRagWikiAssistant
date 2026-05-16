@@ -6,19 +6,22 @@ tests run fully in-process with no external dependencies.
 
 from typing import Any
 
+import pytest
 import requests
 
 from agent.extraction import _normalize_entity
 from agent.retrieval import (
-    _extract_redirect_target,
     _fetch_entity_chunks,
+    _load_redirects,
+    _resolve_via_redirect,
     _title_candidates,
 )
 
 
-def _redirect_chunks(text: str) -> list[dict[str, Any]]:
-    """Build a single-chunk fixture for _extract_redirect_target tests."""
-    return [{"text": text, "metadata": {"source_title": "Source", "chunk_index": 0}}]
+@pytest.fixture(autouse=True)
+def _reset_redirects_cache() -> None:
+    """Clear the process-lifetime redirect cache so tests are order-independent."""
+    _load_redirects.cache_clear()
 
 
 def test_normalize_entity_strips_article_and_descriptor() -> None:
@@ -150,14 +153,66 @@ def test_fetch_entity_chunks_semantic_search_uses_full_question(mocker: Any) -> 
     assert result == [{"text": "fallback", "metadata": {}}]
 
 
-def test_fetch_entity_chunks_follows_redirect_from_opensearch(mocker: Any) -> None:
-    """Redirect chunks returned after opensearch resolution must be followed."""
-    redirect_chunks: list[dict[str, Any]] = [
+def test_fetch_entity_chunks_follows_redirect_table_for_direct_title(
+    mocker: Any,
+) -> None:
+    """A title-variant hit must be transformed via the redirect side-table.
+
+    Redirect pages are skipped at ingest time and replaced with a
+    source→target mapping in SQLite. Agent retrieval must consult that
+    mapping before each ``vs_get_page_by_title`` call so a query for the
+    source title still resolves to the target page's chunks. Without
+    this lookup the agent would return an empty result for every page
+    that used to be a redirect.
+    """
+    final_chunks: list[dict[str, Any]] = [
         {
-            "text": "REDIRECT Woodblock",
-            "metadata": {"source_title": "Wooden Block", "chunk_index": 0},
+            "text": "Apple Orchard is a location.",
+            "metadata": {"source_title": "Apple Orchard", "chunk_index": 0},
         }
     ]
+
+    def fake_get_page(title: str) -> list[dict[str, Any]]:
+        if title == "Apple Orchard":
+            return final_chunks
+        return []
+
+    mocker.patch(
+        "agent.retrieval.get_all_redirects",
+        return_value={"Apple Tree": "Apple Orchard"},
+    )
+    get_page_mock = mocker.patch(
+        "agent.retrieval.vs_get_page_by_title", side_effect=fake_get_page
+    )
+    opensearch_mock = mocker.patch(
+        "agent.retrieval._resolve_title_via_opensearch", return_value=None
+    )
+    embed_mock = mocker.patch("agent.retrieval.embed_chunks")
+    search_mock = mocker.patch("agent.retrieval.vs_semantic_search")
+
+    result = _fetch_entity_chunks("Apple Tree", "where do apples grow?")
+
+    assert result == final_chunks
+    # The side-table lookup must have happened on the candidate, NOT the
+    # raw entity, and the resulting fetch must use the target title.
+    get_page_mock.assert_any_call("Apple Orchard")
+    # Redirect-table resolution wins before opensearch or semantic search.
+    opensearch_mock.assert_not_called()
+    embed_mock.assert_not_called()
+    search_mock.assert_not_called()
+
+
+def test_fetch_entity_chunks_follows_redirect_table_after_opensearch(
+    mocker: Any,
+) -> None:
+    """Opensearch results must also flow through the redirect side-table.
+
+    Even when MediaWiki opensearch resolves a free-text query to a wiki
+    title, that title may itself be a redirect source. The post-
+    opensearch lookup must run through ``_resolve_via_redirect`` so the
+    chunks fetched belong to the final canonical page, not the redirect
+    source (whose chunks no longer exist after re-ingest).
+    """
     final_chunks: list[dict[str, Any]] = [
         {
             "text": "Woodblock is a crafting material.",
@@ -166,12 +221,14 @@ def test_fetch_entity_chunks_follows_redirect_from_opensearch(mocker: Any) -> No
     ]
 
     def fake_get_page(title: str) -> list[dict[str, Any]]:
-        if title == "Wooden Block":
-            return redirect_chunks
         if title == "Woodblock":
             return final_chunks
         return []
 
+    mocker.patch(
+        "agent.retrieval.get_all_redirects",
+        return_value={"Wooden Block": "Woodblock"},
+    )
     mocker.patch("agent.retrieval.vs_get_page_by_title", side_effect=fake_get_page)
     mocker.patch(
         "agent.retrieval._resolve_title_via_opensearch",
@@ -185,54 +242,23 @@ def test_fetch_entity_chunks_follows_redirect_from_opensearch(mocker: Any) -> No
     assert result == final_chunks
 
 
-def test_fetch_entity_chunks_follows_redirect_from_direct_title(mocker: Any) -> None:
-    """A title-variant hit that resolves to a redirect must follow it.
+def test_resolve_via_redirect_caches_map_after_first_load(mocker: Any) -> None:
+    """The redirects map must be loaded from SQLite at most once per process.
 
-    Complements ``test_fetch_entity_chunks_follows_redirect_from_opensearch``
-    above. That test exercised the redirect-follow path that fires
-    AFTER opensearch resolution; this one exercises the same redirect
-    handling on the direct ``_title_candidates`` path. Without
-    coverage here, a refactor that moved the redirect-follow into the
-    opensearch branch only would silently regress the much more
-    common "exact title is a redirect page" case.
+    The cache keeps every agent request from re-querying the same ~5k
+    rows. A regression that reloaded on every call would re-introduce
+    per-query SQLite latency on the hot path.
     """
-    redirect_chunks: list[dict[str, Any]] = [
-        {
-            "text": "REDIRECT Woodblock",
-            "metadata": {"source_title": "Wooden Block", "chunk_index": 0},
-        }
-    ]
-    final_chunks: list[dict[str, Any]] = [
-        {
-            "text": "Woodblock is a crafting material.",
-            "metadata": {"source_title": "Woodblock", "chunk_index": 0},
-        }
-    ]
-
-    def fake_get_page(title: str) -> list[dict[str, Any]]:
-        if title == "Wooden Block":
-            return redirect_chunks
-        if title == "Woodblock":
-            return final_chunks
-        return []
-
-    mocker.patch("agent.retrieval.vs_get_page_by_title", side_effect=fake_get_page)
-    opensearch_mock = mocker.patch(
-        "agent.retrieval._resolve_title_via_opensearch", return_value=None
+    get_all_redirects_mock = mocker.patch(
+        "agent.retrieval.get_all_redirects",
+        return_value={"Apple Tree": "Apple Orchard"},
     )
-    embed_mock = mocker.patch("agent.retrieval.embed_chunks")
-    search_mock = mocker.patch("agent.retrieval.vs_semantic_search")
 
-    # Pass the entity exactly as the redirect title so the first
-    # _title_candidates entry hits the redirect page.
-    result = _fetch_entity_chunks("Wooden Block", "what is a wooden block?")
+    _resolve_via_redirect("Apple Tree")
+    _resolve_via_redirect("Apple Tree")
+    _resolve_via_redirect("Something Else")
 
-    assert result == final_chunks
-    # Redirect was resolved at the title-variant stage — opensearch
-    # and semantic search must not have been consulted.
-    opensearch_mock.assert_not_called()
-    embed_mock.assert_not_called()
-    search_mock.assert_not_called()
+    assert get_all_redirects_mock.call_count == 1
 
 
 def test_opensearch_failure_does_not_raise(mocker: Any) -> None:
@@ -257,72 +283,3 @@ def test_opensearch_failure_does_not_raise(mocker: Any) -> None:
     search_mock.assert_called_once()
 
 
-def test_extract_redirect_target_canonical_format() -> None:
-    """The canonical 'REDIRECT Target' form must resolve to the target title."""
-    assert _extract_redirect_target(_redirect_chunks("REDIRECT Woodblock")) == (
-        "Woodblock"
-    )
-
-
-def test_extract_redirect_target_is_case_insensitive() -> None:
-    """Lower- and mixed-case REDIRECT keywords must still be detected."""
-    assert _extract_redirect_target(_redirect_chunks("redirect Woodblock")) == (
-        "Woodblock"
-    )
-    assert _extract_redirect_target(_redirect_chunks("Redirect Woodblock")) == (
-        "Woodblock"
-    )
-
-
-def test_extract_redirect_target_rejects_redirecting_prefix() -> None:
-    """Prose starting with 'REDIRECTING' must not be parsed as a redirect.
-
-    The old implementation used startswith('REDIRECT') which matched any
-    word beginning with those eight letters and then sliced everything
-    past them as the 'target'. The word boundary in the regex closes
-    that hole.
-    """
-    chunks = _redirect_chunks("REDIRECTING players to the next quest hub.")
-    assert _extract_redirect_target(chunks) is None
-
-
-def test_extract_redirect_target_rejects_redirected_prefix() -> None:
-    """Same false-positive class — 'REDIRECTED from ...' must not match."""
-    chunks = _redirect_chunks("REDIRECTED from an old name.")
-    assert _extract_redirect_target(chunks) is None
-
-
-def test_extract_redirect_target_requires_whitespace_after_keyword() -> None:
-    """REDIRECT must be followed by whitespace, not punctuation or letters.
-
-    Guards against a chunk like 'REDIRECTOR' (no boundary, all letters)
-    or 'REDIRECT.Target' (boundary, but no whitespace before the title).
-    """
-    assert _extract_redirect_target(_redirect_chunks("REDIRECTOR")) is None
-    assert _extract_redirect_target(_redirect_chunks("REDIRECT.Target")) is None
-
-
-def test_extract_redirect_target_stops_at_first_newline() -> None:
-    """Trailing content after a newline must not be slurped into the target."""
-    chunks = _redirect_chunks("REDIRECT Woodblock\nResidual category text.")
-    assert _extract_redirect_target(chunks) == "Woodblock"
-
-
-def test_extract_redirect_target_returns_none_for_non_redirect() -> None:
-    """A normal page chunk must not be mistaken for a redirect."""
-    chunks = _redirect_chunks("Woodblock is a crafting material.")
-    assert _extract_redirect_target(chunks) is None
-
-
-def test_extract_redirect_target_returns_none_for_multi_chunk_pages() -> None:
-    """Redirect pages should always parse to one chunk; reject anything else.
-
-    A multi-chunk result implies the upstream parser/chunker produced
-    something other than a canonical redirect, and we'd rather skip the
-    redirect-follow path than guess at which chunk holds the target.
-    """
-    chunks = [
-        {"text": "REDIRECT Woodblock", "metadata": {"chunk_index": 0}},
-        {"text": "Some other content.", "metadata": {"chunk_index": 1}},
-    ]
-    assert _extract_redirect_target(chunks) is None

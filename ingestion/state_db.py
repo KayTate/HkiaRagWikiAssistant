@@ -39,6 +39,27 @@ ON CONFLICT(page_title) DO UPDATE SET
     updated_at = excluded.updated_at
 """
 
+# Side-table of MediaWiki redirect mappings. Populated during ingestion and read
+# by the agent's retrieval layer to resolve queries against redirect source
+# titles (e.g. "Apple Tree") to the canonical target page (e.g. "Apple
+# Orchard"). Redirect pages themselves are skipped during ingestion so this
+# table is the only place the mapping is persisted.
+_CREATE_REDIRECTS_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS page_redirects (
+    source_title  TEXT PRIMARY KEY,
+    target_title  TEXT NOT NULL,
+    updated_at    TEXT NOT NULL
+);
+"""
+
+_UPSERT_REDIRECT_SQL = """
+INSERT INTO page_redirects (source_title, target_title, updated_at)
+VALUES (?, ?, ?)
+ON CONFLICT(source_title) DO UPDATE SET
+    target_title = excluded.target_title,
+    updated_at = excluded.updated_at
+"""
+
 
 class PageStateRow(TypedDict):
     """Shape of one input row to upsert_pages.
@@ -62,6 +83,7 @@ def _connect() -> sqlite3.Connection:
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
     conn.execute(_CREATE_TABLE_SQL)
+    conn.execute(_CREATE_REDIRECTS_TABLE_SQL)
     conn.commit()
     return conn
 
@@ -214,3 +236,45 @@ def get_status_summary() -> str:
         f"complete: {counts.get('complete', 0)}",
     ]
     return ", ".join(parts)
+
+
+def upsert_redirect(source_title: str, target_title: str) -> None:
+    """Record that ``source_title`` redirects to ``target_title``.
+
+    Idempotent: subsequent calls with a different target overwrite the
+    row via ON CONFLICT, so a redirect whose target moves on the wiki is
+    naturally repaired on the next ingest pass.
+    """
+    with _connection() as conn:
+        conn.execute(
+            _UPSERT_REDIRECT_SQL,
+            (source_title, target_title, _now_iso()),
+        )
+
+
+def delete_redirect(source_title: str) -> None:
+    """Remove a redirect row, if present. No-op when the row does not exist.
+
+    Called by the ingestion pipeline when a page that was previously a
+    redirect now has content, so a stale source→target mapping does not
+    keep diverting agent retrieval to the wrong page.
+    """
+    with _connection() as conn:
+        conn.execute(
+            "DELETE FROM page_redirects WHERE source_title = ?",
+            (source_title,),
+        )
+
+
+def get_all_redirects() -> dict[str, str]:
+    """Return every redirect mapping as a ``{source_title: target_title}`` dict.
+
+    Used once per agent process to populate an in-memory cache. ~5k
+    rows × ~50 chars at the current wiki size is well under the cost
+    of paying per-query SQLite latency on the agent hot path.
+    """
+    with _connection() as conn:
+        rows = conn.execute(
+            "SELECT source_title, target_title FROM page_redirects"
+        ).fetchall()
+    return {row["source_title"]: row["target_title"] for row in rows}
