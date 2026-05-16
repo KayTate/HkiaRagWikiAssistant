@@ -15,13 +15,23 @@ logger = logging.getLogger(__name__)
 
 _MODEL_VERIFY_SAMPLE_SIZE = 10
 
+# One drift entry: (field_name, stored_value, current_value). Both value
+# slots are typed ``object`` rather than ``Any`` because the four fields
+# carry mixed primitive types (str / int) and ``object`` keeps the alias
+# narrower than ``Any`` without leaking ``Any`` further down the API.
+_DriftEntry = tuple[str, object, object]
 
-class EmbeddingModelMismatchError(RuntimeError):
-    """Raised when the ChromaDB collection was built with a different embedding model.
 
-    Operator intervention is required: the collection cannot be auto-repaired
-    because mixing vectors from different models corrupts search results. See
-    the error message for the three-step remediation procedure.
+class CollectionConfigMismatchError(RuntimeError):
+    """Raised when ChromaDB chunks disagree with current ingestion config.
+
+    Covers drift in any of the fields whose value must be identical across
+    every chunk in a collection: the embedding model and the chunking
+    parameters (strategy, size, overlap). Operator intervention is
+    required — mixing chunks built with different settings corrupts both
+    retrieval (different vector spaces) and ranking (different chunk
+    granularity). See the error message for the three-step remediation
+    procedure.
     """
 
 
@@ -57,26 +67,27 @@ def _current_embedding_model() -> str:
     return f"{settings.embedding_model}:{settings.embedding_model_version}"
 
 
-def verify_collection_embedding_model() -> None:
-    """Verify that the ChromaDB collection uses the current embedding model.
+def verify_collection_consistency() -> None:
+    """Verify that ChromaDB chunks match the current ingestion config.
 
-    Draws a uniform random sample of up to _MODEL_VERIFY_SAMPLE_SIZE
-    chunks from the collection. If any sampled chunk was embedded with
-    a different model than the one currently configured, raises
-    EmbeddingModelMismatchError with remediation steps.
+    Draws a uniform random sample of up to ``_MODEL_VERIFY_SAMPLE_SIZE``
+    chunks and compares each chunk's stored metadata against the current
+    settings for: embedding model, chunking strategy, chunk size, chunk
+    overlap. Any mismatch raises ``CollectionConfigMismatchError`` listing
+    every field that drifted with both stored and current values.
 
     Random sampling matters: a partial re-ingest could leave the
-    collection with stale-model chunks at one end and current-model
-    chunks at the other. Sampling the first N rows in insertion order
-    (ChromaDB's default behaviour) would systematically miss drift on
-    one side of that boundary.
+    collection with stale chunks at one end and current chunks at the
+    other. Sampling the first N rows in insertion order would
+    systematically miss drift on one side of that boundary.
 
     Raises:
-        EmbeddingModelMismatchError: If the collection contains chunks from
-            a different embedding model. Operator intervention is required
-            to resolve this — it cannot be auto-repaired.
+        CollectionConfigMismatchError: If a sampled chunk's stored
+            embedding-model or chunking parameters disagree with current
+            settings. The collection cannot be auto-repaired — chunks
+            built with different settings corrupt retrieval and ranking.
     """
-    logger.info("Verifying ChromaDB collection embedding model")
+    logger.info("Verifying ChromaDB collection consistency")
     collection = get_or_create_collection(settings.chroma_collection_name)
     count = collection.count()
     if count == 0:
@@ -95,18 +106,56 @@ def verify_collection_embedding_model() -> None:
     for meta in metadatas:
         if meta is None:
             continue
-        stored_model = meta.get("embedding_model", "")
-        if stored_model != current_model:
-            raise EmbeddingModelMismatchError(
-                f"ChromaDB collection '{settings.chroma_collection_name}' contains "
-                f"chunks embedded with '{stored_model}', but the current embedding "
-                f"model is '{current_model}'. Automatic repair is not possible. "
-                f"To resolve:\n"
-                f"  1. Update settings.chroma_collection_name to a new version "
-                f"(e.g. hkia_v2).\n"
-                f"  2. Run full ingestion to build the new collection.\n"
-                f"  3. Update config to point the application at the new collection."
-            )
+        drift = _detect_drift(meta, current_model)
+        if drift:
+            raise CollectionConfigMismatchError(_format_drift_error(drift))
+
+
+def _detect_drift(
+    meta: dict[str, Any], current_model: str
+) -> list[_DriftEntry]:
+    """Return drift entries ``(field, stored, current)`` for a single chunk.
+
+    Compares the four fields that must be identical across every chunk in
+    a healthy collection: embedding_model, chunking_strategy, chunk_size,
+    chunk_overlap. A chunk with no value for one of these fields is
+    treated as drifted (legacy chunks written before the field existed
+    cannot be reconciled with current settings either).
+    """
+    checks: list[_DriftEntry] = [
+        ("embedding_model", meta.get("embedding_model"), current_model),
+        (
+            "chunking_strategy",
+            meta.get("chunking_strategy"),
+            settings.chunking_strategy,
+        ),
+        ("chunk_size", meta.get("chunk_size"), settings.chunk_size),
+        ("chunk_overlap", meta.get("chunk_overlap"), settings.chunk_overlap),
+    ]
+    return [
+        (field, stored, current)
+        for field, stored, current in checks
+        if stored != current
+    ]
+
+
+def _format_drift_error(drift: list[_DriftEntry]) -> str:
+    """Compose a remediation-rich error message from one chunk's drift entries."""
+    field_lines = "\n".join(
+        f"  - {field}: stored={stored!r}, current={current!r}"
+        for field, stored, current in drift
+    )
+    return (
+        f"ChromaDB collection '{settings.chroma_collection_name}' contains "
+        f"chunks built with different settings than the current configuration. "
+        f"Drifted fields:\n"
+        f"{field_lines}\n"
+        f"Automatic repair is not possible. To resolve:\n"
+        f"  1. Update settings.chroma_collection_name to a new version "
+        f"(e.g. hkia_v2).\n"
+        f"  2. Run full ingestion to build the new collection.\n"
+        f"  3. Update config to point the application at the new collection."
+    )
 
 
 def upsert_chunks(

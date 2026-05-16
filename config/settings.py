@@ -52,7 +52,7 @@ class Settings(BaseSettings):
             "Collection name. Convention: hkia_{embedding_model}_"
             "{chunking_strategy}_v{n}. Bump v{n} when changing "
             "embedding_model or chunking_strategy — the startup sync "
-            "check raises EmbeddingModelMismatchError otherwise."
+            "check raises CollectionConfigMismatchError otherwise."
         ),
     )
 

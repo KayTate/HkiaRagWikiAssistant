@@ -26,7 +26,7 @@ def _make_fake_collection() -> MagicMock:
       Chroma deletes by metadata while a prefix-matching fake would
       silently mask the divergence.
     - get(ids=[...]) returns metadata for exactly those IDs, mirroring
-      the second call shape used by verify_collection_embedding_model
+      the second call shape used by verify_collection_consistency
       after random.sample picks the IDs to inspect.
     - get(include=[]) and get(limit=N) are also supported for the
       IDs-only and legacy-prefix call shapes respectively.

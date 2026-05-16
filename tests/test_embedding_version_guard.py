@@ -1,8 +1,10 @@
 """Tests for the embedding model version guard.
 
-Verifies that verify_collection_embedding_model correctly raises
-EmbeddingModelMismatchError when the ChromaDB collection contains
-chunks from a different model, and passes silently when models match.
+Verifies that verify_collection_consistency correctly raises
+CollectionConfigMismatchError when the ChromaDB collection contains
+chunks from a different embedding model, and passes silently when
+models match. Chunking-parameter drift is covered separately by
+tests/test_chunking_drift_detection.py.
 """
 
 from typing import Any
@@ -11,15 +13,23 @@ from unittest.mock import MagicMock
 import pytest
 
 from vectorstore.client import (
-    EmbeddingModelMismatchError,
-    verify_collection_embedding_model,
+    CollectionConfigMismatchError,
+    verify_collection_consistency,
 )
+
+# Default chunking metadata pinned to current settings so embedding-model
+# tests isolate the embedding_model field as the only source of drift.
+_MATCHING_CHUNK_META = {
+    "chunking_strategy": "recursive",
+    "chunk_size": 512,
+    "chunk_overlap": 64,
+}
 
 
 def _make_collection(chunks: list[tuple[str, str]]) -> MagicMock:
     """Build a MagicMock ChromaDB collection from (id, embedding_model) pairs.
 
-    Mirrors the two-call pattern used by verify_collection_embedding_model:
+    Mirrors the two-call pattern used by verify_collection_consistency:
 
     1. ``collection.get(include=[])`` returns every ID (no metadata).
     2. ``collection.get(ids=[...], include=["metadatas"])`` returns
@@ -50,7 +60,10 @@ def _make_collection(chunks: list[tuple[str, str]]) -> MagicMock:
             return {
                 "ids": list(ids),
                 "documents": None,
-                "metadatas": [{"embedding_model": by_id[i]} for i in ids],
+                "metadatas": [
+                    {"embedding_model": by_id[i], **_MATCHING_CHUNK_META}
+                    for i in ids
+                ],
             }
         limit = kwargs.get("limit")
         if limit is not None:
@@ -60,7 +73,10 @@ def _make_collection(chunks: list[tuple[str, str]]) -> MagicMock:
             return {
                 "ids": [c[0] for c in items],
                 "documents": None,
-                "metadatas": [{"embedding_model": c[1]} for c in items],
+                "metadatas": [
+                    {"embedding_model": c[1], **_MATCHING_CHUNK_META}
+                    for c in items
+                ],
             }
         # IDs-only fetch (include=[]). Metadata key is unused by callers
         # in this branch; returning None matches Chroma's actual shape.
@@ -70,8 +86,15 @@ def _make_collection(chunks: list[tuple[str, str]]) -> MagicMock:
     return collection
 
 
+def _pin_chunking_settings(mocker: Any) -> None:
+    """Pin chunking settings to match ``_MATCHING_CHUNK_META`` for these tests."""
+    mocker.patch("config.settings.settings.chunking_strategy", "recursive")
+    mocker.patch("config.settings.settings.chunk_size", 512)
+    mocker.patch("config.settings.settings.chunk_overlap", 64)
+
+
 def test_guard_raises_on_model_mismatch(mocker: Any) -> None:
-    """Raise EmbeddingModelMismatchError when stored model differs from settings.
+    """Raise CollectionConfigMismatchError when stored model differs from settings.
 
     The guard samples chunks from ChromaDB and detects that the stored
     embedding_model is "nomic-embed-text:v1.5" while current settings
@@ -79,6 +102,7 @@ def test_guard_raises_on_model_mismatch(mocker: Any) -> None:
     """
     mocker.patch("config.settings.settings.embedding_model", "text-embedding-3-small")
     mocker.patch("config.settings.settings.embedding_model_version", "3")
+    _pin_chunking_settings(mocker)
 
     fake_collection = _make_collection([("page::0", "nomic-embed-text:v1.5")])
     mocker.patch(
@@ -86,8 +110,8 @@ def test_guard_raises_on_model_mismatch(mocker: Any) -> None:
         return_value=fake_collection,
     )
 
-    with pytest.raises(EmbeddingModelMismatchError) as exc_info:
-        verify_collection_embedding_model()
+    with pytest.raises(CollectionConfigMismatchError) as exc_info:
+        verify_collection_consistency()
 
     error_message = str(exc_info.value)
     assert "nomic-embed-text:v1.5" in error_message, (
@@ -109,6 +133,7 @@ def test_guard_passes_on_model_match(mocker: Any) -> None:
     """
     mocker.patch("config.settings.settings.embedding_model", "nomic-embed-text")
     mocker.patch("config.settings.settings.embedding_model_version", "v1.5")
+    _pin_chunking_settings(mocker)
 
     fake_collection = _make_collection([("page::0", "nomic-embed-text:v1.5")])
     mocker.patch(
@@ -116,7 +141,7 @@ def test_guard_passes_on_model_match(mocker: Any) -> None:
         return_value=fake_collection,
     )
 
-    verify_collection_embedding_model()
+    verify_collection_consistency()
 
 
 def test_guard_detects_drift_in_non_leading_chunks(mocker: Any) -> None:
@@ -135,6 +160,7 @@ def test_guard_detects_drift_in_non_leading_chunks(mocker: Any) -> None:
     """
     mocker.patch("config.settings.settings.embedding_model", "text-embedding-3-small")
     mocker.patch("config.settings.settings.embedding_model_version", "3")
+    _pin_chunking_settings(mocker)
 
     chunks: list[tuple[str, str]] = [
         (f"page::{i}", "text-embedding-3-small:3") for i in range(40)
@@ -156,8 +182,8 @@ def test_guard_detects_drift_in_non_leading_chunks(mocker: Any) -> None:
 
     mocker.patch("vectorstore.client.random.sample", side_effect=deterministic_sample)
 
-    with pytest.raises(EmbeddingModelMismatchError):
-        verify_collection_embedding_model()
+    with pytest.raises(CollectionConfigMismatchError):
+        verify_collection_consistency()
 
     assert len(sample_calls) == 1, "random.sample must be called exactly once"
     population, k = sample_calls[0]
@@ -182,6 +208,6 @@ def test_guard_no_op_on_empty_collection(mocker: Any) -> None:
     )
     sample_spy = mocker.patch("vectorstore.client.random.sample")
 
-    verify_collection_embedding_model()
+    verify_collection_consistency()
 
     sample_spy.assert_not_called()

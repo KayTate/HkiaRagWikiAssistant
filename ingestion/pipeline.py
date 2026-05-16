@@ -1,19 +1,26 @@
 """Top-level orchestrator for the HKIA wiki ingestion pipeline.
 
-Supports full re-ingestion of all pages and incremental ingestion of
-only new or changed pages. Both modes share the same per-page loop to
-ensure consistent behavior.
+Supports full re-ingestion of all pages, incremental ingestion of only
+new or changed pages, and replay ingestion from a captured Parquet
+snapshot. All three modes share the same per-page loop to ensure
+consistent behavior.
 """
 
 import logging
 from datetime import UTC, datetime
+from pathlib import Path
 
 from config.settings import settings
-from ingestion import api_client, chunker, embedder, parser, state_db
+from ingestion import api_client, chunker, embedder, parser, snapshot, state_db
 from vectorstore import client as vectorstore_client
 from vectorstore.schema import ChunkMetadata
 
 logger = logging.getLogger(__name__)
+
+# SQLite write-batch size for marking snapshot pages pending. Each batch
+# is one transaction inside state_db.upsert_pages, so this also bounds the
+# rollback granularity if a row violates the schema mid-batch.
+_SNAPSHOT_PENDING_BATCH_SIZE = 500
 
 
 def _current_embedding_model() -> str:
@@ -22,11 +29,12 @@ def _current_embedding_model() -> str:
 
 
 def run_startup_sync_check() -> None:
-    """Verify embedding model consistency across ChromaDB and SQLite before ingestion.
+    """Verify collection consistency across ChromaDB and SQLite before ingestion.
 
-    Step 1 samples up to 10 ChromaDB chunks to detect collection-level model
-    drift. If found, raises EmbeddingModelMismatchError — operator must
-    create a new collection and re-ingest.
+    Step 1 samples up to 10 ChromaDB chunks to detect drift in the
+    embedding model or any chunking parameter (strategy, size, overlap).
+    If found, raises CollectionConfigMismatchError — operator must create
+    a new collection and re-ingest.
 
     Step 2 finds SQLite rows with a stale embedding_model and silently
     resets them to 'pending' so they are re-ingested on the next run.
@@ -34,11 +42,12 @@ def run_startup_sync_check() -> None:
     collection has not yet been re-ingested.
 
     Raises:
-        EmbeddingModelMismatchError: If ChromaDB chunks from a different
-            model are detected. See error message for remediation steps.
+        CollectionConfigMismatchError: If ChromaDB chunks built with
+            different embedding-model or chunking settings are detected.
+            See error message for remediation steps.
     """
-    logger.info("Running startup sync check for embedding model consistency")
-    vectorstore_client.verify_collection_embedding_model()
+    logger.info("Running startup sync check for collection consistency")
+    vectorstore_client.verify_collection_consistency()
     _repair_stale_sqlite_rows()
 
 
@@ -75,8 +84,9 @@ def run_full_ingestion() -> None:
     via the delete-before-insert pattern.
 
     Raises:
-        EmbeddingModelMismatchError: If the ChromaDB collection model
-            does not match current settings.
+        CollectionConfigMismatchError: If the ChromaDB collection's
+            stored embedding-model or chunking settings disagree with
+            current settings.
     """
     run_startup_sync_check()
     pages = api_client.get_all_pages_with_revision_ids()
@@ -92,13 +102,68 @@ def run_incremental_ingestion() -> None:
     or have been updated. Complete, unchanged pages are skipped.
 
     Raises:
-        EmbeddingModelMismatchError: If the ChromaDB collection model
-            does not match current settings.
+        CollectionConfigMismatchError: If the ChromaDB collection's
+            stored embedding-model or chunking settings disagree with
+            current settings.
     """
     run_startup_sync_check()
     pages = api_client.get_all_pages_with_revision_ids()
     _mark_changed_pages_pending(pages)
     _process_pending_pages()
+
+
+def run_ingestion_from_snapshot(snapshot_path: Path) -> None:
+    """Ingest from a Parquet snapshot instead of the live wiki.
+
+    Two passes over the snapshot file: the first marks every page
+    pending in SQLite (preserving the same drift-detection invariants as
+    the live modes), the second runs each row's ``(title, revision_id,
+    wikitext)`` triple through the shared ``_ingest_batch`` helper. The
+    snapshot is the only source of wikitext during the run — no calls
+    are made to ``api_client``.
+
+    Args:
+        snapshot_path: Parquet file produced by
+            ``scripts/snapshot_wiki.py``.
+
+    Raises:
+        CollectionConfigMismatchError: If the ChromaDB collection's
+            stored embedding-model or chunking settings disagree with
+            current settings.
+    """
+    run_startup_sync_check()
+
+    current_model = _current_embedding_model()
+    pending_buffer: list[state_db.PageStateRow] = []
+    for row in snapshot.load_snapshot(snapshot_path):
+        pending_buffer.append(
+            {
+                "page_title": row["page_title"],
+                "revision_id": row["revision_id"],
+                "status": "pending",
+                "embedding_model": current_model,
+            }
+        )
+        if len(pending_buffer) >= _SNAPSHOT_PENDING_BATCH_SIZE:
+            state_db.upsert_pages(pending_buffer)
+            pending_buffer.clear()
+    if pending_buffer:
+        state_db.upsert_pages(pending_buffer)
+
+    succeeded = 0
+    failed = 0
+    for row in snapshot.load_snapshot(snapshot_path):
+        batch_succeeded, batch_failed = _ingest_batch(
+            [(row["page_title"], row["revision_id"], row["wikitext"])]
+        )
+        succeeded += batch_succeeded
+        failed += batch_failed
+
+    logger.info(
+        "Snapshot replay complete: %d pages succeeded, %d failed",
+        succeeded,
+        failed,
+    )
 
 
 def _mark_all_pages_pending(
@@ -149,8 +214,8 @@ def _process_pending_pages() -> None:
     pages via the batch API to minimize the number of wiki requests.
     Per-page failures are caught so the rest of the run still processes —
     the failing page keeps its 'in_progress' status and is retried on the
-    next run. Batch-level errors (wikitext fetch failures, embedding-model
-    mismatch) propagate, since those signal a wiki- or
+    next run. Batch-level errors (wikitext fetch failures, collection
+    config mismatch) propagate, since those signal a wiki- or
     configuration-wide problem where continuing would just produce more
     of the same error.
     """
@@ -166,6 +231,7 @@ def _process_pending_pages() -> None:
         titles = [p["page_title"] for p in batch]
         wikitext_map = api_client.get_pages_wikitext_batch(titles)
 
+        items: list[tuple[str, int, str]] = []
         for page in batch:
             title = page["page_title"]
             wikitext = wikitext_map.get(title)
@@ -173,15 +239,41 @@ def _process_pending_pages() -> None:
                 logger.warning("No wikitext returned for '%s', skipping", title)
                 failed += 1
                 continue
-            try:
-                _ingest_page(title, page["revision_id"], wikitext)
-                succeeded += 1
-            except Exception:
-                failed += 1
+            items.append((title, page["revision_id"], wikitext))
+
+        batch_succeeded, batch_failed = _ingest_batch(items)
+        succeeded += batch_succeeded
+        failed += batch_failed
 
     logger.info(
         "Ingestion complete: %d pages succeeded, %d failed", succeeded, failed
     )
+
+
+def _ingest_batch(items: list[tuple[str, int, str]]) -> tuple[int, int]:
+    """Ingest a batch of pre-fetched ``(title, revision_id, wikitext)`` triples.
+
+    Per-page failures are caught so one bad page does not abort the batch;
+    the failing page is left in 'in_progress' state for retry. Shared by
+    the live-wiki and snapshot-replay paths so both surface identical
+    success/fail accounting and identical error containment.
+
+    Args:
+        items: List of ``(title, revision_id, wikitext)`` triples. May be
+            empty, in which case the function returns ``(0, 0)``.
+
+    Returns:
+        ``(succeeded, failed)`` counts for the batch.
+    """
+    succeeded = 0
+    failed = 0
+    for title, revision_id, wikitext in items:
+        try:
+            _ingest_page(title, revision_id, wikitext)
+            succeeded += 1
+        except Exception:
+            failed += 1
+    return succeeded, failed
 
 
 def _ingest_page(page_title: str, revision_id: int, wikitext: str) -> None:
