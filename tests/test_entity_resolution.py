@@ -14,6 +14,7 @@ from agent.retrieval import (
     _fetch_entity_chunks,
     _load_redirects,
     _resolve_via_redirect,
+    _strip_stopwords,
     _title_candidates,
 )
 
@@ -134,7 +135,7 @@ def test_fetch_entity_chunks_uses_opensearch_when_variants_fail(mocker: Any) -> 
 
 
 def test_fetch_entity_chunks_semantic_search_uses_full_question(mocker: Any) -> None:
-    """Semantic fallback must embed the full question, not the bare entity."""
+    """Semantic fallback embeds the full question with stopwords stripped."""
     mocker.patch("agent.retrieval.vs_get_page_by_title", return_value=[])
     mocker.patch("agent.retrieval._resolve_title_via_opensearch", return_value=None)
     embed_mock = mocker.patch(
@@ -148,7 +149,8 @@ def test_fetch_entity_chunks_semantic_search_uses_full_question(mocker: Any) -> 
     question = "How do I unlock the Mystery Tree quest?"
     result = _fetch_entity_chunks("Mystery Tree", question)
 
-    embed_mock.assert_called_once_with([question])
+    # Question has leading stopwords stripped: "How do I" -> removed
+    embed_mock.assert_called_once_with(["unlock the Mystery Tree quest?"])
     search_mock.assert_called_once()
     assert result == [{"text": "fallback", "metadata": {}}]
 
@@ -281,5 +283,70 @@ def test_opensearch_failure_does_not_raise(mocker: Any) -> None:
     assert result == [{"text": "fallback", "metadata": {}}]
     embed_mock.assert_called_once()
     search_mock.assert_called_once()
+
+
+def test_title_candidates_includes_case_insensitive_variants() -> None:
+    """Candidates include title case and lowercase forms for case-insensitive lookup."""
+    candidates = _title_candidates("mystery tree")
+    assert "mystery tree" in candidates
+    assert "Mystery Tree" in candidates
+    # uppercase also included for exhaustive matching
+    assert "MYSTERY TREE" in candidates
+
+    # All variants should work with the entity as given
+    candidates2 = _title_candidates("Mystery Tree")
+    assert "Mystery Tree" in candidates2
+    assert "mystery tree" in candidates2
+
+
+def test_title_candidates_includes_drop_last_word_variants() -> None:
+    """Candidates include drop-last-word variants for compound names."""
+    # "Item" is in the allowlist, so "Magic Hat (item)" -> "Magic Hat"
+    candidates = _title_candidates("Magic Hat")
+    assert "Magic Hat" in candidates
+
+    # With suffix: "Magic Hat (item)" -> include "Magic Hat (item)" and "Magic Hat"
+    item_candidates = _title_candidates("Magic Hat")
+    magic_hat_item = [c for c in item_candidates if "(item)" in c]
+    assert len(magic_hat_item) > 0
+
+    # Single-word entities should not generate drop-last-word variants
+    single = _title_candidates("Banana")
+    banana_base = [c for c in single if "Banana" in c and "(" not in c]
+    assert len(banana_base) > 0
+
+
+def test_title_candidates_drop_last_word_only_for_allowlist() -> None:
+    """Drop-last-word variants only apply to known compound types."""
+    # "Hat" is not in the allowlist, so no drop should occur
+    candidates = _title_candidates("Magic Hat")
+    # We should not get "Magic" as a standalone candidate without suffix
+    standalone_magic = [c for c in candidates if c == "Magic"]
+    assert len(standalone_magic) == 0
+
+
+def test_strip_stopwords_removes_leading_trailing_words() -> None:
+    """Stopword stripping removes common English words from start/end only."""
+    assert (
+        _strip_stopwords("How do I unlock the Mystery Tree")
+        == "unlock the Mystery Tree"
+    )
+    assert _strip_stopwords("the apple of my eye") == "apple of my eye"
+    assert _strip_stopwords("What is the best item") == "best item"
+    # Should not strip middle words
+    assert _strip_stopwords("apple tree of mystery") == "apple tree of mystery"
+
+
+def test_strip_stopwords_returns_text_when_all_stopwords() -> None:
+    """If text is all stopwords, return the original text unchanged."""
+    # "the" is a stopword, but it's the only word, so return it as-is
+    assert _strip_stopwords("the") == "the"
+    assert _strip_stopwords("a the") == "a the"
+
+
+def test_strip_stopwords_handles_empty_and_whitespace() -> None:
+    """Stopword stripping handles empty/whitespace inputs gracefully."""
+    assert _strip_stopwords("") == ""
+    assert _strip_stopwords("   ") == "   "
 
 

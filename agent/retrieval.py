@@ -31,6 +31,27 @@ _TITLE_VARIANT_SUFFIXES: tuple[str, ...] = (
     " (companion ability)",
 )
 
+_ENGLISH_STOPWORDS: frozenset[str] = frozenset({
+    "a", "about", "above", "after", "again", "all", "am", "an", "and", "any",
+    "are", "as", "at", "be", "because", "been", "before", "being", "below",
+    "between", "both", "but", "by", "can", "could", "did", "do", "does",
+    "doing", "down", "during", "each", "few", "for", "from", "further",
+    "had", "has", "have", "having", "he", "her", "here", "hers", "herself",
+    "him", "himself", "his", "how", "i", "if", "in", "into", "is", "it",
+    "its", "itself", "just", "me", "might", "more", "most", "must", "my",
+    "myself", "no", "nor", "not", "of", "off", "on", "only", "or", "other",
+    "out", "over", "own", "same", "should", "so", "some", "such", "than",
+    "that", "the", "their", "theirs", "them", "themselves", "then", "there",
+    "these", "they", "this", "those", "to", "too", "under", "until", "up",
+    "very", "was", "we", "were", "what", "when", "where", "which", "while",
+    "who", "whom", "why", "with", "you", "your", "yours", "yourself",
+    "yourselves",
+})
+
+_ALLOW_DROP_LAST_WORD_FOR: frozenset[str] = frozenset({
+    "ability", "item", "location", "quest", "character",
+})
+
 
 def _chunks_to_documents(chunks: list[dict[str, Any]]) -> list[Document]:
     """Convert chunk dicts to MLflow Documents at the RETRIEVER span boundary."""
@@ -44,7 +65,13 @@ def _chunks_to_documents(chunks: list[dict[str, Any]]) -> list[Document]:
 
 
 def _title_candidates(entity: str) -> list[str]:
-    """Return plausible wiki titles for an entity, most-likely-match first."""
+    """Return plausible wiki titles for an entity, most-likely-match first.
+
+    Generates variants by:
+    1. The exact entity and "The {entity}" prefix variants (with suffixes).
+    2. Case-insensitive forms (title case, lowercase, uppercase).
+    3. Drop-last-word variants (only for compound names).
+    """
     cleaned = entity.strip()
     if not cleaned:
         return []
@@ -58,6 +85,30 @@ def _title_candidates(entity: str) -> list[str]:
         candidates.append(base)
         candidates.extend(base + suffix for suffix in _TITLE_VARIANT_SUFFIXES)
 
+        # Case-insensitive variants: title case, lowercase, uppercase
+        if base != base.title():
+            candidates.append(base.title())
+            candidates.extend(
+                base.title() + suffix for suffix in _TITLE_VARIANT_SUFFIXES
+            )
+        if base != base.lower():
+            candidates.append(base.lower())
+        if base != base.upper():
+            candidates.append(base.upper())
+
+        # Drop-last-word variants for multi-word compounds
+        if " " in base:
+            parts = base.split()
+            if len(parts) >= 2:
+                last_word_lower = parts[-1].lower()
+                # Only drop known suffix words (ability, item, location, etc.)
+                if last_word_lower in _ALLOW_DROP_LAST_WORD_FOR:
+                    shortened = " ".join(parts[:-1])
+                    candidates.append(shortened)
+                    if shortened != shortened.title():
+                        candidates.append(shortened.title())
+
+    # Deduplicate while preserving order
     seen: set[str] = set()
     unique: list[str] = []
     for c in candidates:
@@ -65,6 +116,7 @@ def _title_candidates(entity: str) -> list[str]:
             seen.add(c)
             unique.append(c)
     return unique
+
 
 
 def _resolve_title_via_opensearch(entity: str) -> str | None:
@@ -110,6 +162,23 @@ def _resolve_via_redirect(title: str) -> str:
     wrap a ``vs_get_page_by_title`` argument without a None-check.
     """
     return _load_redirects().get(title, title)
+
+
+def _strip_stopwords(text: str) -> str:
+    """Remove leading/trailing English stopwords from text."""
+    words = text.split()
+    if not words:
+        return text
+
+    # Strip from the start
+    while words and words[0].lower() in _ENGLISH_STOPWORDS:
+        words.pop(0)
+    # Strip from the end
+    while words and words[-1].lower() in _ENGLISH_STOPWORDS:
+        words.pop()
+
+    return " ".join(words) if words else text
+
 
 
 def _fetch_entity_chunks(
@@ -204,10 +273,20 @@ def _resolve_entity_chunks(
         entity,
     )
     search_query = question if question else entity
-    embeddings = embed_chunks([search_query])
+    search_query_stripped = _strip_stopwords(search_query)
+    if not search_query_stripped:
+        search_query_stripped = search_query
+    if search_query_stripped != search_query:
+        logger.info(
+            "Stripped stopwords from semantic query: '%s' -> '%s'",
+            search_query,
+            search_query_stripped,
+        )
+    embeddings = embed_chunks([search_query_stripped])
     return vs_semantic_search(
         query_embedding=embeddings[0], top_k=settings.retrieval_top_k
     )
+
 
 
 def _semantic_search_for_question(question: str) -> list[dict[str, Any]]:
