@@ -165,13 +165,6 @@ class Settings(BaseSettings):
         default=5,
         description="Number of chunks returned by semantic_search per call.",
     )
-    retrieval_similarity_threshold: float = Field(
-        default=0.7,
-        description=(
-            "Cosine-similarity floor reserved for future filtering use; "
-            "currently unused by semantic_search."
-        ),
-    )
 
     # Retrieval logging
     retrieval_log_enabled: bool = Field(

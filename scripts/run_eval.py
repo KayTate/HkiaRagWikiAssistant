@@ -39,7 +39,6 @@ def _params_from_settings() -> dict[str, object]:
         "chunk_size": settings.chunk_size,
         "chunk_overlap": settings.chunk_overlap,
         "retrieval_top_k": settings.retrieval_top_k,
-        "retrieval_similarity_threshold": settings.retrieval_similarity_threshold,
         "agent_max_iterations": settings.agent_max_iterations,
         "chroma_collection_name": settings.chroma_collection_name,
     }

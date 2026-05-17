@@ -211,8 +211,7 @@ Categories (each is a contiguous block in `config/settings.py`):
 - **SQLite** — `state_db_path`.
 - **MLflow** — `mlflow_tracking_uri`, `mlflow_experiment_name`.
 - **Chunking** — `chunking_strategy`, `chunk_size`, `chunk_overlap`.
-- **Retrieval** — `retrieval_top_k`,
-  `retrieval_similarity_threshold`.
+- **Retrieval** — `retrieval_top_k`.
 - **Retrieval logging** — `retrieval_log_enabled`,
   `retrieval_log_file`.
 
@@ -726,7 +725,7 @@ Each experiment varies one parameter from the baseline. All other parameters are
 - Chunking: recursive, chunk_size=512, overlap=64
 - Embedding: nomic-embed-text:v1.5 (Ollama)
 - LLM: gpt-5.4-mini (OpenAI)
-- top_k: 5, similarity_threshold: 0.7
+- top_k: 5
 
 | Experiment | Parameter Changed | Values |
 | --- | --- | --- |
@@ -734,7 +733,6 @@ Each experiment varies one parameter from the baseline. All other parameters are
 | E2 — Embedding | embedding_model | nomic-embed-text (baseline) vs text-embedding-3-small |
 | E3 — LLM | llm_model | gpt-5.4-mini (baseline) vs gpt-4o vs claude-sonnet |
 | E4 — Retrieval | top_k | 3, 5 (baseline), 10 |
-| E4 — Retrieval | similarity_threshold | 0.6, 0.7 (baseline), 0.8 |
 
 **Note on E2:** Switching embedding models requires building a new ChromaDB collection (e.g. `hkia_text-embedding-3-small_recursive_v1`) via full re-ingestion before running the experiment. See Section 5.2.
 
