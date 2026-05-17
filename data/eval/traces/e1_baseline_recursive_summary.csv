@@ -1,0 +1,326 @@
+idx,question,final_answer,correctness,correctness_rationale,relevance,summarization,groundedness
+0,Where is the candy cloud machine?,"The Candy Cloud Machine is located on the upper eastern island of Cloud Island. It is unlocked at friendship level 2 with Lala after completing the ""Sweets in the Stars"" quest.",yes,"The claim states that the candy cloud machine is located on the upper eastern island of Cloud Island. The document explicitly confirms this location, stating that the Candy Cloud Machine is located on the upper eastern island of Cloud Island.",yes,yes,yes
+1,How do I reach Snow Village?,"To reach Snow Village, you must complete the ""Mind the Gap"" quest. This quest involves several steps:
+
+1. Traverse through the Icy Caverns.
+2. Help repair broken bridges at Blizzard Peak with My Melody.
+3. Clear out snowed-in caves.
+4. Shatter large ice chunks using your Pickaxe.
+
+Once you have completed the ""Mind the Gap"" quest, you will gain access to the Snow Village, which is located on the far side of Icy Peak in Friendship Island.",no,"The claim states that to reach Snow Village one must complete the ""Mind the Gap"" quest and gives a detailed list of prerequisite quests that are necessary to complete it. However, the document specifies that to reach Snow Village you must complete the ""Mind the Gap"" quest but does not provide any information regarding the prerequisite quests mentioned in the claim, such as the Mountain Hopes quest or any others. Therefore, the claim is not fully supported by the document.",yes,yes,yes
+2,How do I unlock the Red Hot Ruins?,"To unlock the **Red Hot Ruins**, you need to follow this specific sequence:
+
+1. **Reach friendship level 7 with Retsuko.** This is essential to unlock the quest ""**Enraging Ruins**.""
+2. **Complete the ""**Power Up the Gate**"" quest, which requires reaching friendship level 1 with Chococat. This quest provides access to the necessary areas.
+3. **Start the ""Enraging Ruins"" quest.** During this quest, you will need to find **3 Red Power Crystals**. One of these can only be collected after the quest has started.
+4. **Collect all 3 Red Power Crystals** around the Mount Hothead region:
+   - One is near the entrance, but the next two are available before starting the quest.
+5. **Plug the Red Power Crystals into the gate** at the Red Hot Ruins entrance, unlocking access to the ruins.
+
+After completing these steps, you'll be able to access the Red Hot Ruins and explore the associated puzzles and treasures.",yes,"The claim states that you unlock the Red Hot Ruins by reaching friendship level 7 with Retsuko. The document confirms that reaching friendship level 7 with Retsuko is indeed the first step required to unlock the quest 'Enraging Ruins', which is necessary to access the Red Hot Ruins. Therefore, the statement in the claim is fully supported by the document.",yes,yes,no
+3,How do I unlock the Moon?,"To unlock The Moon in Hello Kitty Island Adventure, you need to complete the following quest chain:
+
+1. **Complete the ""Where It All Began"" quest.**
+2. **Then wait one day to unlock the ""This Tall to Ride"" quest given by Big Challenges.** In this quest, you must:
+   - Gather and gift **15 Ingots** and **5 Ribbons** to Big Challenges.
+   - Meet Big Challenges at the top of Icy Peak.
+   - Find the Island Spirit at the Heart of the Island to help pull off the cover of the ride.
+   - After the ride, the player and Big Challenges will shoot into space, landing on The Moon.
+
+This will grant you access to explore The Moon, where you can interact with the LittleTwinStars and enjoy the low-gravity environment.",no,"The document states that to unlock the Moon, you must complete the ""Where It All Began"" quest followed by the ""This Tall to Ride"" quest, which is correct. However, the claim adds details about other quests and requirements, such as needing friendship levels and multiple other quests (like ""Secrets and Sleuths"", ""Return to the Heart"" series, etc.), which are not mentioned in the document as necessary for unlocking the Moon. The document only specifies the quest chain needed without elaborating on any prerequisites related to friendship levels or other quests. Therefore, while there is partial support regarding the first two quests, the additional requirements listed in the claim are not supported by the document.",yes,yes,yes
+4,How do I unlock Gemstone Mountain?,"To unlock Gemstone Mountain, you need to complete the following prerequisites:
+
+1. Complete the ""Power Up the Gate"" quest.
+2. After ""Power Up the Gate,"" complete the ""A Zipline Adventure"" quest to unlock an additional zipline that can be used to reach Gemstone Mountain.
+
+Once these quests are completed, you can access Gemstone Mountain from the Spooky Swamp, either by traveling north along the beach path or using the newly unlocked zipline.",no,"The claim states that Gemstone Mountain becomes accessible after completing the Power Up the Gate quest, which is supported by the document. However, the claim incorrectly states that reaching friendship level 1 with Chococat is a prerequisite for this quest, which is not mentioned in the document. Additionally, the document outlines that after completing the Power Up the Gate quest, it is necessary to complete another quest, A Zipline Adventure, for an additional zipline to be unlocked, which the claim does not include. Thus, the claim does not fully align with the information provided in the document.",yes,yes,yes
+5,What fish can I find in Rainbow Reef?,"In Rainbow Reef, you can find the following fish:
+
+1. **Opal Flutterfin**
+   - **Rarity**: Common
+   - **Tags**: Fish, Aquatic
+   - **Location**: Boxes east of the Comedy Club and boxes between the Spooky Swamp & Kelp Maze (Spooky Swamp Dock)
+   - **Time**: Evening, Night
+   - **Bait**: Chocolate Chai
+
+Make sure to fish during the specified times and use the right bait to catch the Opal Flutterfin.",no,"The claim lists multiple fish that can be found in Rainbow Reef, including Amethyst Snipe, Briny Clamfish, Electric Tang, Galaxy Grouper, Kelpfin, Masked Wrassler, Royal Lance, Ruby Dreamscale, Sailing Charmfish, Sandy Puffer, Starry Snipe, and Sunset Guppy. However, the document only provides information about one fish, the Opal Flutterfin. As such, the document does not support all the fish mentioned in the claim.",yes,yes,yes
+6,How do I unlock the Spooky Swamp?,"To unlock the Spooky Swamp, you need to complete the following prerequisite chain:
+
+1. **Power Up the Gate** - Complete this quest to gain access to the area leading to the Spooky Swamp.
+2. **Dig It Up** - Complete this quest.
+3. **Beach Blossoms** - Complete this quest.
+4. **Achieve a 5-Star rating with Aro** - You must have Aro reach a 5-star friendship level on your island.
+5. **A Long Awaited Introduction** - Complete this quest.
+
+Once you have followed these steps, you will be able to access the Spooky Swamp region located in the east of Friendship Island.",no,"The claim states that to unlock the Spooky Swamp, you must complete the ""Power Up the Gate"" quest; this part is correct according to the document. However, it also claims that the ""Power Up the Gate"" quest is unlocked by reaching friendship level 1 with Chococat, which is not mentioned in the document. The document does not state how to unlock the ""Power Up the Gate"" quest or mention Chococat at all. Therefore, the claim is partially unsupported.",yes,yes,yes
+7,Which characters are typically in Seaside Resort?,"The wiki content does not provide specific character names that generally reside in the Seaside Resort. Therefore, I cannot answer your question regarding which characters are typically in Seaside Resort.",no,"The document explicitly states that it does not provide specific character names that generally reside in the Seaside Resort, which means it cannot support any character names mentioned in the claim. Therefore, none of the characters listed (My Melody, Hello Kitty, Tuxedosam, Pochacco, Chococat, Badtz-maru, Keroppi) can be confirmed or supported by the document.",yes,no,no
+8,Where can I find Giant Seeds?,"You can find Giant Seeds in the following locations:
+
+1. **Merry Meadow**: In the Merry Meadows Fields, the seed is located on one of the islands towards the bottom right of the pond.
+
+2. **Merry Meadow**: This seed can be obtained from the ""Care Packages"" quest, which is unlocked at friendship level 12 with Wish me mell. You must have the first Beanstalk grown to access the Merry Meadows Plaza.
+
+3. **Merry Meadow**: A Treasure Chest in the ""Electric Introductions"" puzzle room.
+
+4. **Cloud Island**: After completing the ""Cloud Cabins"" quest, this seed is located south of the Outer Cloud Cabin, inside a boulder on a lone island along the Cloud Ride path. You will need to jump south from the Outer Cloud Cabin island using a Thermal Potion or a Companion Ability that boosts floating.
+
+5. **Cloud Island**: This Giant Seed only appears after you break the boulder covering its planting location on the Meadows Gazebo terrace. It cannot be obtained until you have grown all of the other 4 Giant Seeds first. Once the boulder over the Meadows Gazebo's beanstalk plot is broken, a new boulder containing this Giant Seed will appear at the end of the small island chain attached to the north side of the Outer Cloud Cabin.",yes,"The claim lists specific locations for finding Giant Seeds and the document confirms all of these locations: 
+1. In Merry Meadows Fields toward the bottom right of the pond on an island - supported by the document. 
+2. In a treasure chest in the Electric Introductions puzzle room in Merry Meadows Overlook - supported. 
+3. Inside a boulder on an island along the Cloud Ride path after completing the Cloud Cabins quest - confirmed in the document, although it specifies also needing to unlock certain abilities. 
+4. Inside a boulder north of the Outer Cloud Cabin after the planting location is accessible - the document supports this location where the boulder only becomes accessible after certain conditions are met. 
+5. As a reward for the Care Packages quest - also supported by the document, which mentions obtaining it through this quest. Since all statements in the claim are confirmed by the document, the claim is fully supported.",yes,no,no
+9,How do I access Merry Meadows Plaza?,"To access Merry Meadows Plaza, you first need to complete the prerequisite quests. Specifically, you must:
+
+1. Help Keroppi get the Nature Preserve open.
+2. Help Big Challenges.
+
+Once you have completed these steps, you will be able to access Merry Meadows Plaza.",no,"The document provides specific steps that must be completed to access Merry Meadows Plaza, which include helping Keroppi open the Nature Preserve and assisting in Big Challenges. The claim about unlocking Merry Meadows Plaza by planting a Giant Seed in Merry Meadows Fields is not mentioned in the document and is therefore not supported. Thus, the claim does not align with the information provided in the document.",yes,yes,no
+10,What items have the metal tag?,"The wiki content does not list any items that have the metal tag. It specifically mentions that the Lock tag is used for decorative, nonfunctional currency chests and states that no items currently have this tag. Therefore, there are no items with the metal tag in Hello Kitty Island Adventure.",no,"The claim lists several items that supposedly have the metal tag, including the Huge Metal Magnet Lure, Ingot, Metal Magnet Lure, Microphone, Retsuko's Birthday Cake, Sounds of Steel, Tiny Metal Magnet Lure, and Volcanic Guitar. However, the document clearly states that 'no items currently have this tag' and specifically mentions that the wiki does not list any items with the metal tag. Therefore, none of the items listed in the claim are supported by the document.",yes,yes,yes
+11,Where can I find Fish Almanac No. 4?,"You can find Fish Almanac No. 4 in Gemstone Mountain, specifically randomly inside any Thermal Boulder. It is a rare comic and provides information on the Steamy Sunfish, for which the recommended bait is Cookie Nut Shake.",yes,"The claim states that Fish Almanac No. 4 can be found randomly inside any thermal boulder in Gemstone Mountain, which is directly supported by the document. Additionally, the claim mentions that this occurs after steam weather, but the document does not address the conditions under which the Fish Almanac is found. Despite this, since the core location of Gemstone Mountain and thermal boulders for the Fish Almanac is confirmed in the document, we can say the claim is supported overall by the document.",yes,no,yes
+12,How do I obtain the Gudetama Dress?,"The wiki content does not provide information on how to obtain the Gudetama Dress. There are no details about the quest, requirements, or item involved in acquiring it.",no,"The document explicitly states that it does not provide any information on how to obtain the Gudetama Dress, meaning it lacks details about the required actions or items. Therefore, the claim that the dress is unlocked after taking a photo of 132 Gudetamas and interacting with a Gudetama Sign is not supported.",no,yes,no
+13,How do I get a Fwish Nightstand?,"To get a Fwish Nightstand in Hello Kitty Island Adventure, you need to donate fish to the Fwishing Well. The Fwish Nightstand is classified as a rare item in the Fwish Furniture collection.",yes,"The claim states that Fwish Nightstands can be obtained by donating fish to the Fwishing Well. The document confirms that to get a Fwish Nightstand in Hello Kitty Island Adventure, you need to donate fish to the Fwishing Well. Therefore, the claim is fully supported by the document.",yes,yes,yes
+14,What can I craft with paper?,"You can craft the following item with paper:
+
+- **Yummy Wallpaper**
+  - **Rarity**: Uncommon
+  - **Collection**: Yummy
+  - **Location of Crafting Plans**: Treasure Chest in Icy Peak
+  - **Materials Required**:
+    - 50x Mushroom
+    - 50x Pumpkin
+    - 5x Spark
+
+To craft the Yummy Wallpaper, you need to gather the specified materials and find the crafting plans in the Treasure Chest located in Icy Peak.",no,"The document specifically mentions crafting Yummy Wallpaper with paper, but it does not provide information about crafting art supplies, blank books, Badtz-maru Birthday Balloons, or clues. Therefore, only the crafting of Yummy Wallpaper is supported, while the other items mentioned in the claim are not supported by the document.",yes,no,yes
+15,How do I catch a Burning Perch?,"The wiki content does not provide any information on how to catch a Burning Perch. Therefore, I cannot give you specific steps or details regarding this task.",no,"The document explicitly states that it does not provide any information on how to catch a Burning Perch. Therefore, none of the details in the claim regarding the locations of different sizes of Burning Perch, their preferred bait, or lure are supported by the document. The claim is trying to provide specific fishing techniques and information that the document does not address.",no,no,no
+16,How do I make the 50th Anniversary Cheesecake?,"The provided wiki content does not include any information about how to make the 50th Anniversary Cheesecake. Therefore, I cannot provide the recipe or details for this item.",no,"The document explicitly states that it does not provide any information about how to make the 50th Anniversary Cheesecake. Therefore, the claim that it can be made with specific ingredients and conditions (oven upgrade, friendship level, and the bubble ingredient) is not supported by the document at all.",no,yes,no
+17,Where can I find Hello Kitty's Cafe Display Case?,"You can find Hello Kitty's Cafe Display Case inside a Radiant Chest on a floating crate located northeast of Hopscotch Islands in the Seaside Resort (near The Hole). After collecting it, you can purchase it from Small Gift Big Smile for 25 Sand Dollars and 10 Apples.",yes,"The claim states that Hello Kitty's Cafe Display Case can be found inside a Radiant Chest on a floating crate northeast of Hopscotch Islands, which is directly confirmed by the document. Additionally, the claim mentions that it can be purchased from Small Gift Big Smile, which is also supported by the document. Since both parts of the claim are backed by the document, the overall claim is supported.",yes,yes,yes
+18,Where can I get a Spooky Double Bed?,"You can get a Spooky Double Bed by transforming a Spooky Bed at the Dessert Boat. To obtain a Spooky Bed, you need to reach friendship level 19 with Kuromi, which requires you to give her a variety of gifts to increase your friendship. The Spooky Bed costs 30 Mushrooms and 3 Light Stones. Once you have the Spooky Bed, you can then head to the Dessert Boat to convert it into the Spooky Double Bed for 1 Spooky Bed and 25 Feathers.",yes,"The claim states that a Spooky Bed can be transformed into a Spooky Double Bed at the Dessert Boat, which is supported by the document. It also mentions that to unlock the Spooky Bed, you need to reach friendship level 19 with Kuromi, which is also confirmed in the document. Since both parts of the claim are accurately reflected in the document, the claim is fully supported.",yes,yes,yes
+19,How do I get the Retsuko Holiday Stocking?,"To get the Retsuko Holiday Stocking, you will need to participate in the Give & Gather Celebration event in 2025. Here are the steps you must follow:
+
+1. Complete the ""Give & Gather"" quest to give Retsuko's Holiday Gift to Retsuko. 
+2. This quest is part of the Give & Gather Celebration event running from November 20, 2025, until December 28, 2025.
+3. On December 25, 2025, when you give Retsuko's Holiday Gift, you will receive a Character Holiday Gift.
+4. After receiving the Character Holiday Gift, you can open it under the Present Pine to obtain the Retsuko Holiday Stocking.
+
+Please note that the Retsuko Holiday Stocking can only be obtained once and is categorized as a rare furniture item.",yes,"The claim states that to get the Retsuko Holiday Stocking, you must give Retsuko's Holiday Gift during the Give & Gather quest, which is accurate as it matches the instruction in the document. It confirms that this is part of the Give & Gather Celebration event and states when it occurs, which aligns with the claim mentioning December 26th. Additionally, the claim correctly identifies the reward as a Character Holiday Gift that contains the Retsuko Holiday Stocking after giving the gift under the Present Pine. Thus, the claim is fully supported by the document in the context of the question.",yes,yes,yes
+20,When is Espresso's birthday?,Espresso's birthday is currently not officially confirmed by Sanrio for use in Hello Kitty Island Adventure. There is no specific birthday mentioned for Espresso in any Sanrio media.,no,"The claim states that Espresso's birthday is December 4th, but the document explicitly mentions that Espresso's birthday is not officially confirmed by Sanrio and that there is no specific birthday mentioned in any Sanrio media. Therefore, the claim regarding the specific date of December 4th is not supported by the document.",yes,yes,yes
+21,What is Dear Daniel's daily gift when he is on the island?,Dear Daniel's daily gift when he is on the island is 1x Mama's Apple Pie.,yes,"The document states that Dear Daniel's daily gift when he is on the island is 1x Mama's Apple Pie, which directly supports the claim that he gives one Mama's Apple Pie each day. Therefore, the claim is fully supported by the document.",yes,yes,yes
+22,Who are visitors to the island that are friends of Cinnamonroll?,"The visitors to the island that are friends of Cinnamoroll are:
+
+- Cappuccino (best friend)
+- Espresso (friend)
+- Mocha (friend)
+- Chiffon (friend)
+- Azuki (friend)
+- Berry (friend)
+- Cherry (friend)
+- Milk (friend)
+- Poron (friend)
+- Corune (friend)
+
+You can invite Cinnamoroll's little friends to the island by completing the quest titled ""Invite Cinnamoroll's little friends to the island.""",yes,"The document provides a list of visitors to the island who are friends of Cinnamoroll, specifically naming Cappuccino, Espresso, Mocha, Chiffon, Azuki, Berry, Cherry, Milk, Poron, and Corune. Each name in the claim matches the names listed in the document, confirming that all friends mentioned in the claim are indeed referenced as visitors in the document.",yes,yes,yes
+23,What does Retsuko give as a gift?,Retsuko gives Dough as a gift.,no,"The document states that Retsuko gives Dough as a gift, which supports the first part of the claim about Retsuko giving Dough. However, the claim mentions that after friendship level 20, Retsuko gives Retsuko Boxes that contain dough, obsidian shards, and possibly dye pouches. This part of the claim is not supported by the document, as it does not provide any information about what Retsuko gives as a gift after friendship level 20.",yes,no,yes
+24,Who is Tuxedosam?,"Tuxedosam is a resident of the island in Hello Kitty Island Adventure. He is known for being an avid collector of bow ties and has set up a clothing shop called Tuxedosam's Shop, as well as Tuxedosam's Outfit Emporium, located at the Seaside Resort. His birthday is on May 12, and he enjoys cloth, tropical, and fancy items. Tuxedosam can help players change their appearance and eventually offers a dye station for clothing.
+
+He is related to two younger brothers, Pam and Tam. Tuxedosam's level is 15, and he provides gifts such as Thread.",yes,"The claim states that Tuxedosam is an island resident who runs the clothing shop in Seaside Resort. The document confirms that Tuxedosam is indeed a resident of the island in Hello Kitty Island Adventure and that he has set up a clothing shop called Tuxedosam's Shop at the Seaside Resort. Therefore, the claim is fully supported by the document.",yes,yes,yes
+25,When do I unlock the Slow & Steady companion ability?,"You unlock the ""Slow & Steady"" companion ability after reaching Best Friend status with Pompompurin, which requires achieving friendship level 5. After that, when you complete the ""Together Forever"" quest, you will unlock the ability to have two companions at once. The ""Together Forever"" quest requires you to be Best Friends with all 19 current Friends from Friendship Island.",no,"The claim states that the Slow & Steady companion ability is unlocked after reaching friendship level 12. However, the document indicates that this ability is unlocked after reaching Best Friend status with Pompompurin, which requires only achieving friendship level 5. Additionally, the claim mentions that activating this ability provides an extra 5 seconds for island challenge courses, but the document does not mention anything about the effect of the ability or its specific duration. Therefore, the claim is not fully supported by the document.",yes,no,yes
+26,What can I unlock by raising my friendship level to 15 with Kuromi?,"By raising your friendship level to 15 with Kuromi, you will unlock the ""Cauldron blueprints."" This unlock is categorized under Friendship/Crafting Plans and occurs with the notification “You are now Close Friends with Kuromi!” at 1967 XP.",yes,"The document states that by raising the friendship level to 15 with Kuromi, the player will unlock the ""Cauldron blueprints."" This directly supports the claim that reaching friendship level 15 unlocks the blueprints for the Cauldron.",yes,yes,yes
+27,What are the best gifts to give to Keroppi?,"The best gifts to give to Keroppi are:
+
+1. **Critter Totem**
+   - **Tags**: Critters, Swampy, Wood
+   - **Rarity**: Rare
+   - **Source**: Crafting
+   - **Value for Friendship**: 7 hearts.
+
+2. **Swampy Lamb Plush**
+   - **Tags**: Swampy, Happiness
+   - **Rarity**: Uncommon
+   - **Value for Friendship**: 7 hearts.
+
+3. **Bush Friend**
+   - **Tags**: Critters, Swampy
+   - **Rarity**: Rare
+   - **Value for Friendship**: 5 hearts. 
+   - **How to obtain**: Catch with the Net during Keroppi's level 1 quest. 
+
+4. **Swampy Souvenir Doll**
+   - **Tags**: Wood, Swampy
+   - **Rarity**: Uncommon
+   - **Value for Friendship**: Similar value to Bush Friend.
+
+5. **Lily Frog**
+   - **Tags**: Critters, Swampy
+   - **Rarity**: Common
+   - **Value for Friendship**: 4 hearts. 
+
+Any item with the tags **Critters**, **Swampy**, or **Wood** will also be liked by Keroppi.",yes,"The claim states Keroppi's liked tags are Critters, Swampy, and Wood, which is supported by the document's information that Keroppi likes items with these tags. Moreover, the claim lists the best gifts in order of value, and the document provides a similar list of gifts with their tags and values, indicating the Critter Totem and Swampy Lamb Plush as top gifts. Therefore, the claim is fully supported by the information in the document.",yes,yes,yes
+28,Who is Tam?,"Tam is a visitor in Hello Kitty Island Adventure, specifically known as Tuxedosam's younger brother. He has a quiet and respectful personality and is not very talkative, but he is always thoughtful. Tam visits the player at the Seaside Resort during the Summer (June 1 to August 31) and Winter (December 1 to February 28/29) seasons, provided that his Visitor Cabin requirements are met. His daily gift to players is 1x Fabric, and until he reaches a 5-star friendship level, he will assign one Daily Quest per visit. 
+
+To unlock Tam as a permanent resident, you need to meet certain requirements for his Visitor Cabin, including having it located in Seaside Resort, possessing one piece of Sunshine Celebration Furniture, and displaying five pieces of clothing. After becoming a permanent resident, Tam will often be found inside Tuxedosam's Shop.",yes,"The claim states that Tam is Tuxedosam's younger brother, which is confirmed in the document. It also mentions that Tam can visit the island at any time in Summer or Winter if specific Visitor Cabin requirements are met, a detail also present in the document. Furthermore, the claim describes the requirements needed for Tam's Visitor Cabin, including its location in the Seaside Resort, one piece of Sunshine Celebration furniture, and five pieces of clothing on display, which are all explicitly stated in the document. Thus, the claim is fully supported by the document.",yes,yes,yes
+29,What are daily rewards?,"Daily rewards in Hello Kitty Island Adventure are gifted to the player when they log in to play and come in two forms: daily login rewards and event login rewards from calendars. 
+
+1. **Daily Login Rewards**: Each day, My Melody gives players a gift for logging in. The rewards change daily at the reset time and include:
+   - **Monday**: 3 Random Items
+   - **Tuesday**: Friendship Blossom
+   - **Wednesday**: 3 Random Items
+   - **Thursday**: Friendship Blossom
+   - **Friday**: Strawberry Crate
+   - **Saturday**: Friendship Bouquet
+   - **Sunday**: Island Bouquet
+
+   These daily rewards must be claimed from My Melody on the specific day and cannot be claimed after the next reset.
+
+2. **Event Daily Rewards**: During special events, daily rewards may include event clothing, crafting plans, Strawberry Crates, event currency, and other themed items. These can be accessed through the Daily Rewards application found in the Menu Tablet.
+
+To claim items from the Daily Rewards, the player must click ""Collect"" or ""Collect All"" while the Daily Rewards application is open.",yes,"The claim states that 'Daily rewards are given to the player when they log in for the day,' which is supported by the document that states daily rewards are gifted to players when they log in. It also mentions 'Daily login rewards are given by My Melody after logging in,' which is supported as the document specifies that My Melody gives players gifts each day for logging in. Lastly, the claim mentions 'During events, additional Event Daily Rewards may also be available,' which is also supported by the document that describes event daily rewards being offered during special events. Therefore, the claim is fully supported by the document in the context of the question.",yes,yes,yes
+30,How does the inventory system work?,"The inventory system in Hello Kitty Island Adventure allows players to manage various items and rewards. Here are the key details:
+
+1. **Character Gift Boxes**: These can be opened in the inventory to obtain their contents. You can open one at a time or all of one type at once, and the rewards depend on the box size. Rewards can include Collectors Hats, Dye Pouches, Currency, and Materials.
+
+2. **Bonbons from Chocolate Boxes**: You can open Chocolate Boxes from the inventory to receive Bonbons. These boxes are found in the ""Items"" tab, not the ""Toolbox"" tab.
+
+3. **Inventory Limitations**: The inventory can hold a maximum of 3 Friendship Blossoms at a time. If you reach this limit, you cannot collect the Friendship Blossom Daily Reward until you have less than the maximum amount. 
+
+4. **Crafting Plans and Instructions**: These do not appear in the inventory. Crafting Plans are found only in the Crafting Bench's crafting menu, while Instructions are in the Creation Station's crafting menu. 
+
+5. **Hello Kitty Collectible Cards**: These cards do not show up in the inventory and are only available in the events collections.
+
+Overall, the inventory helps manage items you can collect or use but has specific limits and conditions for certain items.",no,"The claim states that the inventory contains all items owned, excluding those used for decorating Visitor Cabins, which while implied as 'items you can collect or use', is not explicitly mentioned in the document. Furthermore, the claim states there is no maximum number of items you can own, but the document indicates a limitation on certain items, such as the maximum number of Friendship Blossoms. Lastly, the claim mentions that some items are usable only from inside the inventory, which is partially supported, but the details regarding usability of items are not clearly defined in the document. Therefore, the whole claim is not fully supported.",yes,yes,yes
+31,What are passive tools?,"Passive tools in Hello Kitty Island Adventure are tools that are always available to be used if the correct conditions are met; they do not need to be equipped via the Tool Wheel. Examples of passive tools include:
+
+1. **Balloons** - Used for floating in the air, obtained during the ""Happy Landings"" quest.
+2. **Flippers** - Allow swimming in water, obtained during the ""Finding Flippers"" quest.
+3. **Snorkel** - Enables diving in water, obtained during the ""Deep Diving"" quest.
+4. **Pickaxe** - Used for breaking boulders and certain other objects, obtained during the ""Revive the Oasis"" quest.
+5. **Watering Can** - Used for watering plants including Gift Flowers and regular Flowers, obtained during the ""Flower Power"" quest.
+6. **Cloudlight** - Used for removing Dark Water, obtained during ""The Mystery Tree"" quest.
+7. **Fast Flippers** - Allow swimming faster in water, obtained during the ""Rain or Shine"" quest.
+
+These tools provide passive abilities without requiring the player to select them actively from the Tool Wheel.",yes,"The claim defines passive tools correctly as tools that are always available if the correct conditions are met, which aligns with the document's definition. Additionally, the claim lists examples of passive tools—balloons, flippers, snorkel, pickaxe, and watering can—that match the examples provided in the document. Therefore, the claim is fully supported by the document.",yes,yes,yes
+32,How does stamina work?,"Stamina in Hello Kitty Island Adventure functions as a resource that is consumed during various activities, particularly climbing and running. There are several ways to manage and enhance your stamina:
+
+1. **Stamina Apple Slice**: Gained as a friendship reward from Retsuko at friendship level 3, this item helps to improve stamina.
+
+2. **Companion Abilities**: 
+   - Retsuko's companion ability decreases stamina loss, which makes it easier for you to climb and explore without exhausting your stamina too quickly.
+   - Additionally, having Pekkle as a companion increases your climbing speed.
+
+3. **Potions**: You can consume a Stamina Recharge Potion, which reduces the rate of stamina loss for 5 minutes. This potion can be crafted using the Cauldron inside the Witch's Hut in Spooky Swamp, and the recipe is unlocked during the ""Potion Hunt: The Opening"" quest.
+
+4. **Stamina Drain Reduction**: This ability is unlocked after completing all level 5 tasks, where your stamina bars will decrease more slowly while near your friend. A second level effect can be unlocked after completing all level 17 tasks, further reducing stamina usage.
+
+To summarize, you can enhance and manage your stamina through friendship rewards, companion abilities, potions, and abilities unlocked through quests.",yes,"The claim states that stamina is used for exploring parts of Friendship Island and for activities like diving and climbing. The document confirms that stamina is consumed during climbing and running, which supports the claim. The claim also mentions that stamina capacity can be increased by crafting stamina apples; this is supported as the document mentions Stamina Apple Slice as a friendship reward that helps improve stamina. Next, the claim notes that some companion abilities affect stamina use, which is confirmed in the document with specific mentions of Retsuko's ability decreasing stamina loss. Lastly, the claim refers to the Stamina Recharge Potion aiding stamina management, which matches the document's content about using the potion to reduce stamina loss. Therefore, all parts of the claim are well-supported by the document.",yes,yes,yes
+33,What are birthday quests?,"Birthday quests in Hello Kitty Island Adventure are special quests that can be completed to celebrate Hello Kitty's birthday. Each birthday event includes a sequenced set of quests that the player can complete for unique rewards. The specific birthday quests include:
+
+1. ""Bows in the Attic""
+2. ""A Fresh Coat Of Paint""
+3. ""Balloons and Bluffs""
+4. ""Happy Returns""
+
+These quests are available as part of the birthday celebration and grant birthday-related rewards, which can only be completed once per year. The rewards include Party Favors, which are commemorative cabin decorations, and Birthday Balloons, which serve as cabin decorations crafted from plans obtained through the quests.
+
+If a player has already completed these quests in a previous year, they will not be able to complete them again.",yes,"The claim states that a birthday quest is a special type of Special Gatherings quest available for 7 days each year, corresponding to an island resident's birthday, and this is supported by the document which indicates that birthday quests occur once a year in celebration of Hello Kitty's birthday. The claim also mentions receiving a decorative party favor and birthday balloon crafting plans, which aligns with the document's mention of Party Favors as commemorative decorations and Birthday Balloons crafted from plans obtained through the quests. Moreover, the claim states that these quests are not repeatable, which is also confirmed by the document indicating that if a player has completed them in a previous year, they cannot complete them again. Therefore, the claim is fully supported.",yes,yes,yes
+34,What are Around the Island quests?,"The wiki content does not provide any information regarding ""Around the Island"" quests. Therefore, I cannot provide specific details about them.",no,"The document states that there is no information provided regarding ""Around the Island"" quests, which indicates that the claim about these quests involving exploration, item collection, and unlocking requirements is unsupported. Since the document lacks specific details, it contradicts the claim's assertions.",no,yes,no
+35,How does friendship work?,"Friendship in Hello Kitty Island Adventure involves leveling up with Island Residents, ultimately reaching the maximum level known as Best Friends. When you achieve this status with a character, instead of receiving their usual return gift, you will receive a **Character Gift Box**. 
+
+### Key Points about Friendship:
+- **Character Gift Boxes**: 
+  - Obtained only after reaching Best Friends status with a character.
+  - They may contain materials, currency, Dye Pouches, Character Hats, and sometimes comics.
+  - There are three sizes of boxes based on the amount of friendship hearts given in gifts: Small, Medium, and Regular.
+
+- **Box Sizes**:
+  - **Small Box**: Requires 2 friendship hearts.
+  - **Medium Box**: Requires 3 friendship hearts.
+  - **Regular Box**: Can contain 8-10 of the character’s return gift and additional items, with a possibility of ""Legendary"" items (like Character Hats).
+
+- **Daily Quests**: Completing Daily Quests related to a character can also reward you with a regular-sized Character Box before reaching Best Friends status.
+
+- **Joint Multiplayer**: In multiplayer mode, players can level friendship independently. They unlock special abilities together that transfer to different pairs depending on the Multiplayer Friendship Level.
+
+For example, if you become Best Friends with **Hello Kitty**, you would receive a **Hello Kitty Box** that can contain:
+- **Small Box Rewards**: Tofu Sand Dollar
+- **Medium Box Rewards**: Tofu Sand Dollar, Red Dye, Yellow Dye, White Dye
+- **Regular Box Rewards**: Tofu Sand Dollar, Red Dye, Yellow Dye, White Dye, **Hello Kitty Collector's Hat**.
+
+To enhance your friendship and obtain these rewards, it’s essential to engage in gifting and completing quests associated with the characters.",yes,"The claim states that you can increase friendship with Island Residents by giving them gifts, which aligns with the document's emphasis on leveling friendship through gifting. The claim mentions a maximum of 3 gifts can be given per day, which is not explicitly stated in the document, but is a reasonable assumption within the context of gifting mechanics in games. It also states that this limit can be reset using a Friendship Blossom or Friendship Bouquet, which is not covered in the document, yet does not contradict the information provided. Furthermore, the claim that raising the friendship level may unlock companion abilities, avatar palettes, furniture, recipes, crafting plans, and quests aligns with the idea of unlocking additional rewards and benefits through friendship levels as indicated in the document. The mention of Character Gift Boxes as rewards at the Best Friends level also supports the claim's assertion about receiving rewards from friendship. Overall, the claim is mostly supported by the document despite minor discrepancies.",yes,yes,yes
+36,How do I get My Melody Boxes?,"To obtain My Melody Boxes, you need to follow these steps:
+
+1. **Become Best Friends with My Melody**: Reach the maximum friendship level with My Melody.
+
+2. **Complete Daily Quests**: After becoming Best Friends, complete Daily Quests. 
+
+You can receive My Melody Boxes by gifting My Melody and completing the Daily Quests. When you open the boxes from your inventory, you can receive various materials and potentially a My Melody Collectors Hat. 
+
+**Possible rewards from the boxes include**:
+- **Small Box Rewards**: Flour, Sand Dollar
+- **Medium Box Rewards**: Flour, Sand Dollar, Pink Dye, White Dye, Yellow Dye
+- **Regular Box Rewards**: My Melody Collectors Hat, Flour, Sand Dollar, Pink Dye, White Dye, Yellow Dye.",yes,"The document clearly states that to obtain My Melody Boxes, you need to become Best Friends with My Melody and complete Daily Quests. This directly supports the claim that My Melody Boxes are obtained by gifting My Melody and completing Daily Quests after reaching Best Friend status with her. Additionally, the claim asserts that the boxes replace her regular return gift once you hit the maximum friendship level, which aligns with the document's implication that upon reaching the maximum friendship level, My Melody Boxes are what you receive instead of regular gifts. Therefore, the entire claim is supported by the document.",yes,yes,yes
+37,What is the Fish Derby?,"The wiki content does not provide any specific information about the Fish Derby, including its details or context. Therefore, I cannot answer your question about it based on the provided content.",no,"The claim provides specific details about the Fish Derby, including its location, requirements to unlock it, targets, submission process, and prize details. However, the document explicitly states that it does not provide any specific information about the Fish Derby, including its details or context. Therefore, none of the details in the claim are supported by the document.",no,no,no
+38,What is an Avatar Palette?,"I'm sorry, but the wiki content does not provide any information regarding an Avatar Palette.",no,"The document explicitly states that it does not provide any information regarding an Avatar Palette. Therefore, it does not support the claim that an Avatar Palette is a customization option, nor does it provide details about changing character appearance or unlocking additional palettes through friendship levels.",no,no,no
+39,How do I unlock the flower plots on Caldera?,"To unlock the flower plots on Caldera, you need to complete the quest ""Dragon's Breath,"" which is part of the ""Extremophile Flora"" quest series. 
+
+Here are the steps to follow:
+
+1. Ensure you have completed the ""Extremophile Flora"" quest series.
+2. Speak to Wish me mell to start the ""Dragon's Breath"" quest.
+3. Travel to the Caldera with Wish me mell and Nina.
+4. Gather and provide Wish me mell with 5 Magma Blooms to enhance the soil.
+5. Plant a wild Seed in the Caldera, which will grow into a Blazebulb flower. 
+
+Once these tasks are completed, you will unlock the Caldera flower plots.",yes,"The document states that to unlock the flower plots on Caldera, one must complete the quest ""Dragon's Breath,"" which is part of the ""Extremophile Flora"" quest series. The claim aligns with this as it also mentions that completing the Dragon's Breath quest is necessary and that it requires completing the Extremophile Flora quest series. Additionally, while the document does not elaborate on the specific requirements for unlocking the Extremophile Flora quest series, the requirement of completing previous quests (like plucking the first Dreampuff and having specific residents) as described in the claim does not contradict any information in the document. Thus, the claim is supported by the document regarding the fundamental requirement to unlock the flower plots on Caldera.",yes,yes,yes
+40,How do I unlock the cloud cabins on Cloud Island?,"To unlock the cloud cabins on Cloud Island, you must first complete the following prerequisites:
+
+1. **Stargazing** - Complete this quest to gain access to Cloud Island.
+2. **Friends and Family** - This quest must be started to unlock Island Visitors.
+3. **Building Bridges** - Complete this quest as well.
+4. **Make Yourself At Home** - After completing Building Bridges, wait until the next reset.
+
+Once these quests are completed, travel to Cloud Island, where you will meet Kiki and Lala at one of the Cloud Ride locations. Kiki will activate the Cloud Ride that allows you to access the islands with cloud cabins. After traveling to the next island via the Cloud Ride, Kiki and Lala will introduce you to the cloud cabins.",no,"The document lists specific quests that must be completed to unlock the cloud cabins on Cloud Island, such as Stargazing, Friends and Family, Building Bridges, and Make Yourself At Home. However, the claim mentions a completely different set of quests and friendship levels that are not mentioned in the document. Therefore, the claim is not supported as it does not align with the information provided in the document.",yes,yes,no
+41,How do I repair the boardwalk to Gemstone Mountain?,"To repair the boardwalk to Gemstone Mountain, you need to complete the quest titled ""Help Keroppi restore the Nature Preserve."" Here are the steps you need to follow:
+
+1. **Gather Materials**: You must collect and gift the following items to Big Challenges:
+   - 20x Woodblock
+   - 20x Spark
+
+2. **Meet Big Challenges**: You will meet Big Challenges and TOPHAT on the beach of Seaside Resort.
+
+3. **Repair the Boardwalk**: After you have gifted the materials, you, along with Big Challenges and TOPHAT, will travel to the bridge connecting Seaside Resort and Spooky Swamp, near the Resort Gate. Big Challenges will then repair the bridge, which is part of the boardwalk.
+
+Completing these steps will allow you to repair the boardwalk to Gemstone Mountain.",no,"The document states that to repair the boardwalk to Gemstone Mountain, one must complete the quest 'Help Keroppi restore the Nature Preserve,' which involves gathering materials and meeting Big Challenges, among others. However, the claim mentions a different quest called 'Coastal Crawl' and its prerequisites, which are not found in the document. Therefore, parts of the claim about the Coastal Crawl quest and its prerequisites are not supported by the document.",yes,yes,yes
+42,How do I get back to the airplane?,"To get back to the airplane, you need to follow these steps:
+
+1. Complete the quest ""Delivery Service"" given by Cinnamoroll.
+2. Once you have completed that quest, Cinnamoroll will give you a Propeller Hat.
+3. Deliver the Propeller Hat to the Nul standing next to the Resort Plaza fast-travel point.
+4. After giving the Nul the Propeller Hat, you can ask them to transport you back to the airplane.
+
+Additionally, after finding the Mailbox Key inside the plane and returning it to Cinnamoroll, you will have unlimited access to the plane in the future.",no,"The claim states that you can travel to the airplane at any time by speaking to the Propeller Hat Nul after completing the Cinnamonroll Is Missing quest. However, the document does not mention a quest called 'Cinnamonroll Is Missing' at all; it mentions the 'Delivery Service' quest specifically. The document outlines the steps needed to return to the airplane, including completing the 'Delivery Service' quest and using the Propeller Hat obtained from Cinnamoroll, but it does not support the existence of the 'Cinnamonroll Is Missing' quest or the required friendship levels detailed in the claim. Therefore, the claim is not fully supported by the document.",yes,no,no
+43,How do I unlock the treasure hunt?,"To unlock the Treasure Hunt, you need to complete the ""Chasing the Horizon"" quest. Once that quest is finished, the Treasure Hunt will be available, allowing you to find a hidden treasure each day in the Spooky Swamp region. The signboard showing the daily treasure and the Ship's Nul are located just north of the Dock along the Spooky Swamp Coast.",no,"The document states that to unlock the Treasure Hunt, the user needs to complete the ""Chasing the Horizon"" quest. However, the claim provides a detailed sequence of prerequisites leading to that quest, which includes several other quests (Pirate Pearl, Cursed Crates, Stray Shipments, and Deep Diving) along with specific friendship levels and additional quests that are not mentioned in the document. Since the claim includes information not found in the document, it is not fully supported.",yes,yes,yes
+44,How do I unlock the Snow Day ability?,"To unlock the Snow Day ability, you need to complete the Snow Day Quest. This quest is necessary to unlock Moppu as a Friend, which grants you the Snow Day ability.",no,"The document states that to unlock the Snow Day ability, you need to complete the Snow Day Quest, but it does not mention the friendship levels with Moppu or the series of quests that the claim outlines. The claim's details about reaching friendship levels, completing quests (Aim for Fun, Snacks'n'Sweets, Tinkering Time, and Mind the Gap) are not supported by the document.",yes,yes,yes
+45,How do I unlock the fish derby?,"To unlock the Fish Derby, you need to complete the ""Fish Derby Fun"" quest. Once you have completed this quest, the Fish Derby mini game will be available for you to play at the Resort Docks, located near the Comic and Bait Shop.",no,"The document states that to unlock the Fish Derby, you need to complete the ""Fish Derby Fun"" quest, which is in agreement with the claim. However, the document does not provide any information regarding the additional quests mentioned in the claim, such as 'Swimming Upstream', 'A Bigger Fish Tale', 'A Fishy Investigation', 'Enraging Ruins', or their requirements. Since the document only supports the first step of the claim and does not confirm the subsequent requirements outlined in the claim, the claim is not fully supported by the document.",yes,yes,yes
+46,How do I craft a thistle flower crown?,"To craft a Thistle Flower Crown in **Hello Kitty Island Adventure**, you need to meet the following requirements:
+
+1. **Friendship Level**: You must reach friendship level 16 with **Wish me mell**.
+   
+2. **Materials Required**:
+   - **Thread**: 5
+   - **Thistle**: 15 
+
+Once you have the required friendship level and materials, you can use the **Creation Station** to craft the Thistle Flower Crown.",no,"The claim states that to craft a Thistle Flower Crown, one needs to reach friendship level 16 with Wish me mell, but the document states that friendly level 16 is required, while the claim mentions level 10, which is lower than stated in the document. The claim also includes detailed steps to unlock the Creation Station and gather materials, but these steps are not mentioned in the document, which simply lists the friendship level and materials needed without any quest requirements. Thus, the claim includes unsupported details not found in the document.",yes,no,yes
+47,How do I craft a marigold candle?,"To craft a marigold candle, you need to use the Creation Station located in Merry Meadow. The recipe requires the following ingredients:
+
+- 5 Beeswax
+- 5 Marigold
+
+Combine these items at the Creation Station to create the marigold candle.",no,"The document confirms that to craft a marigold candle, you need to use the Creation Station in Merry Meadows and you need 5 marigolds and 5 beeswax. However, the claim includes additional information about the requirement of completing the A Place to Art quest to unlock the Creation Station, the dependency on other quests, and the timing of marigold flower availability during the Colorblaze Carnival event. This extra information is not supported by the document, which focuses solely on the crafting process.",yes,yes,yes
+48,How do I unlock the Wild Mountain Time quest?,"To unlock the ""Wild Mountain Time"" quest in Hello Kitty Island Adventure, you must follow these steps:
+
+1. **Complete the ""Dig It Up"" quest** - This quest is given by Wish me mell and requires you to achieve friendship level 10 with her.
+2. **Achieve a 5-star rating with Poco** - Ensure you have a high enough friendship rating with Poco.
+3. **Have Poco as a permanent island resident** - You need to have made Poco a permanent resident of your island.
+4. Once the above prerequisites are completed, you will be able to access the ""Wild Mountain Time"" quest.
+
+This quest allows you to plant flowers in Gemstone Mountain and grow Thistle. You will meet Wish me mell and Poco at Gemstone Mountain during this quest.",yes,"The document states that to unlock the 'Wild Mountain Time' quest, you must complete the 'Dig It Up' quest and have Poco as a permanent resident. The claim accurately states that you need to complete 'Dig It Up' to achieve friendship level 10 with Wish me mell and also mentions needing Poco as a permanent 5-star resident. Both points align with the document. Additionally, the claim provides details on how to complete 'Dig It Up,' including steps to achieve friendship levels, which although are not explicitly required details for the question, do not contradict the information provided in the document. Therefore, the claim's statements about these prerequisites are uniformly supported by the document.",yes,yes,no

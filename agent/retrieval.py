@@ -29,6 +29,7 @@ _TITLE_VARIANT_SUFFIXES: tuple[str, ...] = (
     " (location)",
     " (ability)",
     " (companion ability)",
+    " (Tag)",
 )
 
 _ENGLISH_STOPWORDS: frozenset[str] = frozenset({

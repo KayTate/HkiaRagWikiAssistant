@@ -43,12 +43,32 @@ def _extract_entity_from_question(question: str) -> str | None:
         return cleaned or None
 
     patterns = [
+        # Specific shapes go before generic verb patterns so they win the
+        # first-match-wins race. "What items have the X tag?" pulls X for
+        # a Tag-namespace lookup (paired with the " (Tag)" suffix in
+        # agent.retrieval._TITLE_VARIANT_SUFFIXES).
+        r"what\s+items?\s+have\s+(?:the\s+)?(.+?)\s+tag",
+        r"when\s+is\s+(.+?)['’]s\s+birthday",
+        r"what\s+does\s+(.+?)\s+(?:give|do|say)",
+        r"which\s+(?:characters?|residents?|visitors?|fish|items?|quests?)"
+        r"\s+(?:are|live|reside|can\s+i\s+find)\s+(?:typically\s+)?"
+        r"(?:in|at|on)\s+(.+?)(?:\?|$|\.|\,)",
+        r"what\s+(?:fish|items?|characters?|quests?)\s+can\s+i\s+find\s+in"
+        r"\s+(.+?)(?:\?|$|\.|\,)",
+        r"what\s+is\s+(?:an?|the)\s+(.+?)(?:\?|$|\.|\,)",
+        r"how\s+does\s+(.+?)\s+work",
+        # Existing verb-driven patterns.
         r"craft\s+(?:a\s+|an\s+)?(.+?)(?:\?|$|\.|\,)",
         r"unlock\s+(.+?)(?:\?|$|\.|\,)",
         r"complete\s+(.+?)(?:\?|$|\.|\,)",
         r"find\s+(.+?)(?:\?|$|\.|\,)",
         r"get\s+(?:to\s+)?(.+?)(?:\?|$|\.|\,)",
         r"reach\s+(.+?)(?:\?|$|\.|\,)",
+        # New verbs surfaced by trace analysis: obtain, catch, make,
+        # access, repair. "the boardwalk" / "a Burning Perch" article is
+        # absorbed so _normalize_entity sees a bare entity.
+        r"(?:obtain|catch|make|access|repair)\s+(?:a\s+|an\s+|the\s+)?"
+        r"(.+?)(?:\?|$|\.|\,)",
         r"where\s+is\s+(.+?)(?:\?|$|\.|\,)",
         r"who\s+is\s+(.+?)(?:\?|$|\.|\,)",
         r"about\s+(.+?)(?:\?|$|\.|\,)",

@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 import requests
 
-from agent.extraction import _normalize_entity
+from agent.extraction import _extract_entity_from_question, _normalize_entity
 from agent.retrieval import (
     _fetch_entity_chunks,
     _load_redirects,
@@ -31,6 +31,49 @@ def test_normalize_entity_strips_article_and_descriptor() -> None:
     assert _normalize_entity("an Ice and Glow quest series") == "Ice and Glow"
     assert _normalize_entity("Mystery Tree") == "Mystery Tree"
     assert _normalize_entity("") == ""
+
+
+@pytest.mark.parametrize(
+    "question, expected",
+    [
+        # Specific shapes added to cover trace-confirmed gaps.
+        ("What items have the metal tag?", "metal"),
+        ("When is Espresso's birthday?", "Espresso"),
+        ("What does Retsuko give as a gift?", "Retsuko"),
+        (
+            "Which characters are typically in Seaside Resort?",
+            "Seaside Resort",
+        ),
+        ("What fish can I find in Rainbow Reef?", "Rainbow Reef"),
+        ("What is the Fish Derby?", "Fish Derby"),
+        ("What is an Avatar Palette?", "Avatar Palette"),
+        ("How does the inventory system work?", "inventory system"),
+        # New verbs: obtain, catch, make, access, repair.
+        ("How do I obtain the Gudetama Dress?", "Gudetama Dress"),
+        ("How do I catch a Burning Perch?", "Burning Perch"),
+        (
+            "How do I make the 50th Anniversary Cheesecake?",
+            "50th Anniversary Cheesecake",
+        ),
+        ("How do I access Merry Meadows Plaza?", "Merry Meadows Plaza"),
+        # Existing verb patterns still work after the reorder.
+        ("How do I unlock the Spooky Swamp?", "Spooky Swamp"),
+        ("How do I reach Snow Village?", "Snow Village"),
+        ("Where is the candy cloud machine?", "candy cloud machine"),
+        ("Who is Tuxedosam?", "Tuxedosam"),
+    ],
+)
+def test_extract_entity_from_question_patterns(
+    question: str, expected: str
+) -> None:
+    """Regex-driven entity extraction covers the trace-observed question shapes."""
+    assert _extract_entity_from_question(question) == expected
+
+
+def test_title_candidates_includes_tag_suffix() -> None:
+    """A bare-noun entity yields a ' (Tag)' variant for Tag-namespace pages."""
+    candidates = _title_candidates("metal")
+    assert "Metal (Tag)" in candidates
 
 
 def test_title_candidates_includes_the_prefix_variants() -> None:

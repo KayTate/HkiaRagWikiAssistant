@@ -63,7 +63,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--dataset",
-        default="data/eval/golden_set.json",
+        default="data/eval/golden_set_revised.json",
         help="Path to the golden JSON dataset (default: data/eval/golden_set.json).",
     )
     args = parser.parse_args()
