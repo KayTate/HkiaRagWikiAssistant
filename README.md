@@ -219,6 +219,23 @@ Prerequisites:
   runner copies the `.env` value into the process environment so
   MLflow's OpenAI SDK calls authenticate correctly.
 
+To run the full planned E1–E4 sweep (10 runs across 4 MLflow
+experiments: chunking, embedding, LLM, retrieval top_k), use the
+wrapper:
+
+```bash
+python scripts/run_experiments.py                 # all 12 runs
+python scripts/run_experiments.py --dry-run       # preview matrix
+python scripts/run_experiments.py --only e2_openai_embed
+python scripts/run_experiments.py --start-from e4_top_k_3
+```
+
+The wrapper preflights `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` (only if
+needed), and the existence of every collection it will read. The sweep
+stops on the first failure and prints a `--start-from` hint to resume.
+Assumes `scripts/run_ablation_ingestion.py` has built the variant
+collections.
+
 Inspect runs in the MLflow UI (see above).
 
 ## Architecture
