@@ -13,6 +13,39 @@ logger = logging.getLogger(__name__)
 
 _RECURSIVE_SEPARATORS = ["\n\n", "\n", " ", ""]
 
+# Wiki section headers that the recursive splitter routinely isolates into
+# their own chunks when the section body sits in a separate split window.
+# Every chunk in this set is exact-text-only (no body); they carry no
+# answerable content and, because their text is identical across many
+# pages, they share the same embedding — clustering tightly in the HNSW
+# index and crowding the top-k of unrelated queries.
+#
+# Membership rule: text the wiki uses as a section header AND that
+# appeared, post-stripping, as a top duplicate in the live collection
+# audit. Conservative on purpose — anything containing real content
+# (Category links, item attributes, prose) stays.
+_BOILERPLATE_CHUNK_TEXTS: frozenset[str] = frozenset({
+    "Quest Information",
+    "Past Events",
+    "Event Information\nCurrent Event",
+    "Event Information\nMost Recent Event",
+    "List of Items",
+    "__NOTOC__\nList of Items",
+    "Gallery",
+    "Item Details",
+    "Item Details\n\nColors & Alternates",
+    "Item Details\n\nItem Cost",
+    "Manual Activation",
+    "Quests",
+    "Notes",
+    "Table of Contents\nList of Sub-Collections",
+})
+
+
+def _is_boilerplate(text: str) -> bool:
+    """Return True if text matches a known section-header-only chunk."""
+    return text.strip() in _BOILERPLATE_CHUNK_TEXTS
+
 
 def chunk_text(
     text: str,
@@ -25,7 +58,10 @@ def chunk_text(
 
     Dispatches to recursive_chunk or section_chunk depending on the
     strategy argument. The 'section' strategy requires sections to be
-    provided; if they are absent, falls back to 'recursive'.
+    provided; if they are absent, falls back to 'recursive'. After
+    chunking, drops any chunk whose stripped text is in
+    ``_BOILERPLATE_CHUNK_TEXTS`` — header-only artifacts that pollute
+    semantic search results.
 
     Args:
         text: Full plain-text content of the page (used by 'recursive').
@@ -36,11 +72,14 @@ def chunk_text(
             Required when strategy == 'section'.
 
     Returns:
-        List of text chunks in document order.
+        List of text chunks in document order, with header-only
+        boilerplate chunks removed.
     """
     if strategy == "section" and sections:
-        return section_chunk(sections, chunk_size, overlap)
-    return recursive_chunk(text, chunk_size, overlap)
+        chunks = section_chunk(sections, chunk_size, overlap)
+    else:
+        chunks = recursive_chunk(text, chunk_size, overlap)
+    return [c for c in chunks if not _is_boilerplate(c)]
 
 
 def recursive_chunk(text: str, chunk_size: int, overlap: int) -> list[str]:

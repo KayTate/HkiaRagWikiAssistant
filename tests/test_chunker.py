@@ -183,6 +183,92 @@ def test_section_chunk_omits_heading_prefix_when_heading_empty() -> None:
     assert chunks[0] == "Intro paragraph content."
 
 
+# ---------------------------------------------------------------------------
+# boilerplate-chunk filter
+# ---------------------------------------------------------------------------
+
+
+def test_chunk_text_recursive_drops_header_only_chunks() -> None:
+    """A chunk that resolves to a known section-header gets filtered out.
+
+    The recursive splitter routinely isolates wiki section headers
+    (``"Quest Information"``, ``"Past Events"``) into their own chunks
+    when the section body sits in a separate split window. Those chunks
+    carry no answerable content but, because their text is identical
+    across many pages, share embeddings and crowd top-k results — so
+    chunk_text drops them.
+    """
+    text = "Quest Information\n\nBody paragraph with real information."
+    chunks = chunk_text(
+        text=text, strategy="recursive", chunk_size=20, overlap=0
+    )
+    assert "Quest Information" not in chunks
+    assert any("Body paragraph" in c for c in chunks)
+
+
+def test_chunk_text_section_drops_header_only_chunks() -> None:
+    """The same allowlist applies when section_chunk emits a bare header.
+
+    Section-strategy with an empty heading and boilerplate body produces
+    a chunk equal to the boilerplate text — exactly what the recursive
+    path produces. Both paths share the post-chunking filter.
+    """
+    sections: list[dict[str, Any]] = [
+        {"heading": "", "content": "Quest Information"},
+        {"heading": "", "content": "Real prose follows here."},
+    ]
+    chunks = chunk_text(
+        text="",
+        strategy="section",
+        chunk_size=512,
+        overlap=64,
+        sections=sections,
+    )
+    assert "Quest Information" not in chunks
+    assert "Real prose follows here." in chunks
+
+
+def test_chunk_text_does_not_drop_boilerplate_inside_larger_chunk() -> None:
+    """The filter is exact-stripped-text match — substring matches are kept.
+
+    A real chunk that happens to contain the literal "Quest Information"
+    inside a longer body must survive: only chunks whose entire content
+    *is* the section header are artifacts.
+    """
+    text = (
+        "Quest Information: The player must speak to Hello Kitty before "
+        "continuing on the way."
+    )
+    chunks = chunk_text(
+        text=text, strategy="recursive", chunk_size=512, overlap=0
+    )
+    assert chunks
+    assert text in chunks[0]
+
+
+def test_chunk_text_drops_boilerplate_with_trailing_whitespace() -> None:
+    """Stripping happens before the allowlist check.
+
+    The splitter occasionally hands us chunks with trailing newlines —
+    pin that a literal ``"Quest Information\\n"`` still matches and gets
+    filtered, so the filter is robust to splitter whitespace quirks.
+    """
+    # Force a known boilerplate chunk to reach chunk_text via the
+    # section path (more deterministic than coaxing the recursive
+    # splitter into producing trailing whitespace).
+    sections: list[dict[str, Any]] = [
+        {"heading": "", "content": "Quest Information   \n"},
+    ]
+    chunks = chunk_text(
+        text="",
+        strategy="section",
+        chunk_size=512,
+        overlap=64,
+        sections=sections,
+    )
+    assert chunks == []
+
+
 def test_section_chunk_recursively_splits_oversized_sections() -> None:
     """A section larger than chunk_size must produce multiple chunks.
 
