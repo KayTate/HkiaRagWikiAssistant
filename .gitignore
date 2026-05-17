@@ -14,7 +14,7 @@ __pycache__/
 
 # Data stores (reproducible or local-only)
 chroma_data/
-data/ingestion_state.db
+data/*.db
 mlruns/
 mlflow.db
 snapshots/

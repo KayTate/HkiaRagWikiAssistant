@@ -36,7 +36,6 @@ from chromadb.errors import NotFoundError
 # Allow `python scripts/run_ablation_ingestion.py` to import top-level modules.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from config.logging_config import setup_logging  # noqa: E402
 from config.settings import settings  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -199,9 +198,13 @@ def _select_variants(only: str | None) -> list[Variant]:
 
 
 def main() -> None:
-    """Parse args, run preflight checks, then loop over variants."""
-    setup_logging()
+    """Parse args, run preflight checks, then loop over variants.
 
+    Deliberately does not call ``setup_logging()`` — the parent never logs
+    (all output is ``print()``), and holding a ``RotatingFileHandler`` open
+    on ``logs/hkia.log`` blocks the child subprocess's rotation on Windows
+    (parent's write handle prevents ``os.rename``).
+    """
     parser = argparse.ArgumentParser(
         description=(
             "Ingest every ChromaDB collection required for the planned "
