@@ -8,7 +8,7 @@ import json
 import logging
 
 from agent.extraction import strip_markdown_fences
-from config.settings import settings
+from agent.llm import _call_llm
 
 logger = logging.getLogger(__name__)
 
@@ -25,21 +25,30 @@ Good: "What materials do I need to craft a Wooden Bench?"
 - Do not generate questions about information not present in the chunk.
 - Generate fewer pairs for short or sparse chunks (1 pair if the chunk \
 contains only one distinct fact).
-- Return only valid JSON. No preamble, no markdown fences."""
+- Return only valid JSON. No preamble, no markdown fences.
+
+Return a JSON array of objects matching this exact shape:
+[
+  {
+    "inputs": {"question": "<question text>"},
+    "expected_response": "<answer text>",
+    "metadata": {"question_type": "<category>"}
+  }
+]"""
 
 USER_PROMPT_TEMPLATE = """Chunk:
 {chunk_text}
 
 Question category: {question_type}
 
-Generate {n} question/answer pairs. Return as JSON array:
-[{{"question": "...", "answer": "...", "question_type": "..."}}]"""
+Generate {n} question/answer pairs in the JSON array format described, \
+setting "question_type" in metadata to "{question_type}"."""
 
 SHORT_CHUNK_TOKEN_THRESHOLD = 200
 SHORT_CHUNK_PAIR_COUNT = 1
 DEFAULT_PAIR_COUNT = 2
 
-REQUIRED_PAIR_KEYS = {"question", "answer", "question_type"}
+REQUIRED_PAIR_KEYS = {"inputs", "expected_response", "metadata"}
 
 
 def _estimate_token_count(text: str) -> int:
@@ -92,47 +101,27 @@ def _validate_pairs(
         if missing:
             logger.warning("Skipping pair missing keys %s: %r", missing, item)
             continue
+
+        inputs = item["inputs"]
+        if not isinstance(inputs, dict) or not isinstance(
+            inputs.get("question"), str
+        ):
+            logger.warning("Skipping pair with malformed 'inputs': %r", item)
+            continue
+        if not isinstance(item["expected_response"], str):
+            logger.warning(
+                "Skipping pair whose 'expected_response' is not a str: %r", item
+            )
+            continue
+        metadata = item["metadata"]
+        if not isinstance(metadata, dict) or not isinstance(
+            metadata.get("question_type"), str
+        ):
+            logger.warning("Skipping pair with malformed 'metadata': %r", item)
+            continue
+
         validated.append(item)
     return validated
-
-
-def _call_llm(prompt_user: str) -> str:
-    """Send a prompt to the configured LLM and return the raw text response.
-
-    Uses the ollama provider by default. Only ollama is supported because
-    the eval pipeline is designed to run locally without paid API access.
-
-    Args:
-        prompt_user: The user-turn content to send.
-
-    Returns:
-        Raw text from the LLM response.
-
-    Raises:
-        RuntimeError: If the LLM provider is not 'ollama' or the call fails.
-    """
-    if settings.llm_provider != "ollama":
-        raise RuntimeError(
-            f"Synthetic generation only supports 'ollama' provider, "
-            f"got '{settings.llm_provider}'. Set LLM_PROVIDER=ollama."
-        )
-
-    try:
-        import ollama
-    except ImportError as err:
-        raise RuntimeError(
-            "ollama package is required for synthetic generation. "
-            "Install it with: uv add ollama"
-        ) from err
-
-    response = ollama.chat(
-        model=settings.llm_model,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": prompt_user},
-        ],
-    )
-    return str(response["message"]["content"])
 
 
 def generate_for_chunk(
@@ -168,7 +157,7 @@ def generate_for_chunk(
     )
 
     try:
-        raw_response = _call_llm(user_prompt)
+        raw_response = _call_llm(SYSTEM_PROMPT, user_prompt)
     except RuntimeError:
         logger.exception("LLM call failed for chunk; returning empty list")
         return []

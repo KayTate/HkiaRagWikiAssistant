@@ -8,10 +8,7 @@ enough that the helper-level tests guard against the most likely
 regressions.
 """
 
-from typing import Any
-from unittest.mock import MagicMock
-
-import pytest
+from typing import Any, cast
 
 from eval.generate import (
     _estimate_token_count,
@@ -19,6 +16,16 @@ from eval.generate import (
     _validate_pairs,
     generate_for_chunk,
 )
+
+
+def _question_of(pair: dict[str, object]) -> str:
+    """Extract the question text from a validated pair for assertions.
+
+    ``_validate_pairs`` returns ``list[dict[str, object]]``, so the
+    nested ``inputs`` dict is opaque to mypy. Narrowing here keeps
+    individual test bodies free of repeated ``cast`` boilerplate.
+    """
+    return cast(dict[str, str], pair["inputs"])["question"]
 
 # ---------------------------------------------------------------------------
 # _estimate_token_count
@@ -97,8 +104,16 @@ def _chunk_for_logging() -> dict[str, object]:
 def test_validate_pairs_accepts_well_formed_list() -> None:
     """All required keys present → all pairs survive."""
     raw = [
-        {"question": "Q1", "answer": "A1", "question_type": "crafting"},
-        {"question": "Q2", "answer": "A2", "question_type": "friendship"},
+        {
+            "inputs": {"question": "Q1"},
+            "expected_response": "A1",
+            "metadata": {"question_type": "crafting"},
+        },
+        {
+            "inputs": {"question": "Q2"},
+            "expected_response": "A2",
+            "metadata": {"question_type": "friendship"},
+        },
     ]
     assert _validate_pairs(raw, _chunk_for_logging()) == raw
 
@@ -123,29 +138,69 @@ def test_validate_pairs_drops_non_dict_items() -> None:
     behaved.
     """
     raw = [
-        {"question": "Q1", "answer": "A1", "question_type": "crafting"},
+        {
+            "inputs": {"question": "Q1"},
+            "expected_response": "A1",
+            "metadata": {"question_type": "crafting"},
+        },
         "not a dict",
     ]
     result = _validate_pairs(raw, _chunk_for_logging())
     assert len(result) == 1
-    assert result[0]["question"] == "Q1"
+    assert _question_of(result[0]) == "Q1"
 
 
 def test_validate_pairs_drops_items_missing_required_keys() -> None:
-    """A dict missing one of the three required keys is dropped silently.
+    """A dict missing one of the top-level keys is dropped silently.
 
-    Required keys: question, answer, question_type. A regression that
-    relaxed the validation (e.g. allowing question alone) would let
+    Required keys: inputs, expected_response, metadata. A regression
+    that relaxed the validation (e.g. allowing inputs alone) would let
     malformed entries flow into the golden dataset.
     """
     raw = [
-        {"question": "Q1", "answer": "A1", "question_type": "crafting"},
-        {"question": "Q2", "answer": "A2"},  # missing question_type
-        {"question": "Q3"},  # missing answer + question_type
+        {
+            "inputs": {"question": "Q1"},
+            "expected_response": "A1",
+            "metadata": {"question_type": "crafting"},
+        },
+        {"inputs": {"question": "Q2"}, "expected_response": "A2"},  # missing metadata
+        {"inputs": {"question": "Q3"}},  # missing expected_response + metadata
     ]
     result = _validate_pairs(raw, _chunk_for_logging())
-    questions = [p["question"] for p in result]
-    assert questions == ["Q1"]
+    assert [_question_of(p) for p in result] == ["Q1"]
+
+
+def test_validate_pairs_drops_items_with_malformed_inner_shape() -> None:
+    """Top-level keys alone aren't enough — inner shape must match too.
+
+    Guards against an LLM that hits the outer keys but fills them with
+    the wrong types (e.g. ``inputs`` as a string, or ``metadata``
+    without ``question_type``).
+    """
+    raw = [
+        {
+            "inputs": "Q1",  # should be a dict with 'question'
+            "expected_response": "A1",
+            "metadata": {"question_type": "crafting"},
+        },
+        {
+            "inputs": {"question": "Q2"},
+            "expected_response": 42,  # should be a str
+            "metadata": {"question_type": "crafting"},
+        },
+        {
+            "inputs": {"question": "Q3"},
+            "expected_response": "A3",
+            "metadata": {"source": "synthetic"},  # missing question_type
+        },
+        {
+            "inputs": {"question": "Q4"},
+            "expected_response": "A4",
+            "metadata": {"question_type": "crafting"},
+        },
+    ]
+    result = _validate_pairs(raw, _chunk_for_logging())
+    assert [_question_of(p) for p in result] == ["Q4"]
 
 
 # ---------------------------------------------------------------------------
@@ -163,7 +218,9 @@ def test_generate_for_chunk_returns_validated_pairs(mocker: Any) -> None:
     mocker.patch(
         "eval.generate._call_llm",
         return_value=(
-            '[{"question": "Q1", "answer": "A1", "question_type": "crafting"}]'
+            '[{"inputs": {"question": "Q1"}, '
+            '"expected_response": "A1", '
+            '"metadata": {"question_type": "crafting"}}]'
         ),
     )
     chunk = {
@@ -174,7 +231,8 @@ def test_generate_for_chunk_returns_validated_pairs(mocker: Any) -> None:
     result = generate_for_chunk(chunk, question_type="crafting", n_pairs=1)
 
     assert len(result) == 1
-    assert result[0]["question"] == "Q1"
+    assert _question_of(result[0]) == "Q1"
+    assert result[0]["expected_response"] == "A1"
 
 
 def test_generate_for_chunk_handles_markdown_fenced_response(mocker: Any) -> None:
@@ -190,7 +248,9 @@ def test_generate_for_chunk_handles_markdown_fenced_response(mocker: Any) -> Non
         "eval.generate._call_llm",
         return_value=(
             "```json\n"
-            '[{"question": "Q1", "answer": "A1", "question_type": "crafting"}]\n'
+            '[{"inputs": {"question": "Q1"}, '
+            '"expected_response": "A1", '
+            '"metadata": {"question_type": "crafting"}}]\n'
             "```"
         ),
     )
@@ -199,7 +259,7 @@ def test_generate_for_chunk_handles_markdown_fenced_response(mocker: Any) -> Non
     result = generate_for_chunk(chunk, question_type="crafting", n_pairs=1)
 
     assert len(result) == 1
-    assert result[0]["question"] == "Q1"
+    assert _question_of(result[0]) == "Q1"
 
 
 def test_generate_for_chunk_returns_empty_list_on_parse_failure(
@@ -236,44 +296,3 @@ def test_generate_for_chunk_returns_empty_list_on_llm_runtime_error(
     assert generate_for_chunk(chunk, question_type="crafting", n_pairs=1) == []
 
 
-# ---------------------------------------------------------------------------
-# _call_llm — provider gating
-# ---------------------------------------------------------------------------
-
-
-def test_call_llm_raises_for_non_ollama_provider(mocker: Any) -> None:
-    """eval/generate's local _call_llm only supports the Ollama backend.
-
-    The synthetic-generation pipeline runs locally without paid API
-    access; routing to OpenAI or Anthropic here would silently
-    incur cloud costs. The guard surfaces the misconfiguration.
-    """
-    from eval.generate import _call_llm
-
-    mocker.patch("config.settings.settings.llm_provider", "openai")
-
-    with pytest.raises(RuntimeError, match="only supports 'ollama' provider"):
-        _call_llm("user prompt")
-
-
-def test_call_llm_invokes_ollama_chat_with_settings_model(mocker: Any) -> None:
-    """The local _call_llm must pass settings.llm_model through to ollama.chat.
-
-    Without this, a default model (or no model at all) would silently
-    be used — invisible to the operator until results regressed.
-    """
-    from eval.generate import _call_llm
-
-    mocker.patch("config.settings.settings.llm_provider", "ollama")
-    mocker.patch("config.settings.settings.llm_model", "llama3")
-
-    fake_ollama = MagicMock()
-    fake_ollama.chat.return_value = {"message": {"content": "response text"}}
-    mocker.patch.dict("sys.modules", {"ollama": fake_ollama})
-
-    result = _call_llm("user prompt")
-
-    assert result == "response text"
-    fake_ollama.chat.assert_called_once()
-    call_kwargs = fake_ollama.chat.call_args.kwargs
-    assert call_kwargs["model"] == "llama3"
