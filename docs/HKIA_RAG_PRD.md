@@ -68,6 +68,50 @@ Questions about materials, crafting recipes, item sources, and what items are us
 **Location and exploration**
 Questions about where things are, how to reach areas, and what unlock prerequisites exist for locations (which may not be explicitly labeled as "prerequisites" in the wiki).
 
+#### 4.1.1 Answer Completeness Archetypes
+
+Each question category has a set of information elements that a complete answer should include when relevant. These archetypes are descriptive, not prescriptive — not every answer will require every element, but a well-formed answer should include whichever elements apply to the specific question. The archetypes serve two purposes: they are the rubric for authoring and auditing golden set expected answers, and they define what "complete" means when evaluating agent output.
+
+##### Quest prerequisites / unlock chains
+
+- The immediate prerequisite quests or conditions for the target quest
+- The quest trigger: which character gives the quest and where
+- For each prerequisite that is itself a quest, the steps required to complete it (not just the quest name)
+- For visitor-to-resident prerequisites: the conditions for the visitor to appear (cabin requirements, seasonal/weekly rotation if applicable), and the 5-star friendship threshold required before the visitor can move in as a resident
+- For prerequisites gated by friendship level: the specific character and level required
+
+##### General game mechanics
+
+- What the mechanic does and how the player interacts with it
+- Numerical limits and thresholds (e.g. 3 gifts per day, stamina wheel count, daily reset at 6:00 AM GMT)
+- How to extend, improve, or reset the mechanic if applicable (e.g. Stamina Apple Slices increase stamina capacity, Friendship Blossoms reset the daily gift limit)
+- Any unlock prerequisites for the mechanic itself (e.g. swimming requires Flippers, diving requires Snorkel)
+
+##### Character friendship info
+
+- The specific friendship level threshold relevant to the question
+- What unlocks at that level: quest, companion ability, item, outfit, or other reward
+- For companion ability questions: the ability name, its mechanical effect, and the friendship level that unlocks it
+- Gift preferences and return gifts when the question involves gifting
+- The character's Best Friend level cap when the question is character-specific (this varies — Hello Kitty is 25, most others are 15 or 20)
+- Any prerequisites beyond friendship level (some friendship quests also require main story progression)
+
+##### Item and crafting info
+
+- Where the item or recipe is found or unlocked
+- The materials or ingredients required
+- The crafting station required to make it
+- Any unlock conditions for the station or recipe itself if applicable
+
+##### Location and exploration
+
+- Unlock prerequisites: the quest(s) or game progression milestone required to access the location
+- Required tools or abilities for access (e.g. Flippers for underwater areas, sufficient stamina for climbing areas)
+- Notable characters or stations at the location when relevant to the question
+- Sub-areas with their own additional unlock conditions (e.g. Mount Hothead's caldera requires "Fire Up The Volcano" separately from the base Gemstone Mountain unlock)
+
+**Category assignment tiebreakers** — some questions touch multiple categories. When a question could reasonably belong to more than one, assign based on the primary entity named in the question: if it names a quest, it is `prerequisite`; if it names a location, it is `location`; if it names a character, it is `friendship`; if it names an item or recipe, it is `crafting`. Questions about how a system works in general (not about a specific entity) are `mechanic`. Each entry carries exactly one `question_type` — multi-label tagging is not used.
+
 ### 4.2 Interaction Model
 
 - Simple chat interface: user types a natural language question, receives a natural language answer
